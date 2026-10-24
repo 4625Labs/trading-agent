@@ -11,6 +11,7 @@ export interface Venues {
 }
 export interface WorkerOpts {
   simulateHuman?: boolean; // auto-tap Approve (test mode only)
+  realEnabled?: () => boolean; // config switch: send real testnet orders (default true)
   log?: (s: string) => void;
 }
 
@@ -100,9 +101,9 @@ export class Worker {
   private async execute(t: Thesis, agent: string): Promise<PlaceOrderResult> {
     const synth: TradeResult = await this.venues.synthetic.placeOrder(t);
     await this.db.recordSynthetic(synth);
-    let realNote = "no real venue configured";
+    let realNote = this.venues.real ? "real orders are switched off in the settings" : "no real venue configured";
     let real: TradeResult | undefined;
-    if (this.venues.real) {
+    if (this.venues.real && (this.opts.realEnabled?.() ?? true)) {
       try {
         real = await this.venues.real.placeOrder(t);
         await this.db.recordReal(real);

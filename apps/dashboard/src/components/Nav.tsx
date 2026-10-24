@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "./Icon";
-const items: [string, string, string][] = [["/", "Overview", "overview"], ["/feed", "Feed", "feed"], ["/approvals", "Approvals", "approvals"], ["/demo", "Demo", "demo"], ["/trace", "Trace", "trace"], ["/integrations", "Integrations", "integrations"], ["/safety", "Safety", "safety"], ["/learning", "Learning", "learning"], ["/preferences", "Prefs", "prefs"]];
+const items: [string, string, string][] = [["/", "Overview", "overview"], ["/feed", "Feed", "feed"], ["/approvals", "Approvals", "approvals"], ["/demo", "Demo", "demo"], ["/cycles", "Cycles", "cycle"], ["/execution", "Execution", "bars"], ["/trace", "Trace", "trace"], ["/integrations", "Integrations", "integrations"], ["/safety", "Safety", "safety"], ["/learning", "Learning", "learning"], ["/preferences", "Prefs", "prefs"]];
 export default function Nav() {
   const p = usePathname();
   if (p === "/login") return null;

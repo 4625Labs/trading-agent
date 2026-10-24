@@ -123,7 +123,7 @@ Think of it as a careful junior analyst who:
 - **A test once closed real demo positions** because its watcher scanned the shared database. Fixed with a scope option, and the damaged rows were repaired.
 - **Shorts are practice-only** because the test exchange is spot-only.
 - **Omnara cannot hand back stored secrets.** Exchange keys are copied from our local settings file to the cloud machine with owner-only permissions and never printed.
-- **Rotate secrets after the event:** a database password appeared once in a tool's output during a misconfiguration. Rotate it before any public sharing of logs.
+- **Secrets hygiene:** a database password once appeared in a tool's output during a misconfiguration; it has since been rotated. Keys live only in the local settings file and the cloud machine's owner-only copy.
 - **Test data cleared** before deployment; the database starts clean.
 
 ---

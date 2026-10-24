@@ -5,6 +5,7 @@ import { generateTheses, pgThesisReaders, proposeToAgent } from "./thesis/index.
 import { emit } from "./trace.ts";
 import { applyFeedback } from "./feedback.ts";
 import { runLearningCycle } from "./learning/cycle.ts";
+import { runReplay100 } from "./replay/index.ts";
 
 /** Demo price overrides apply ONLY to the close-out watcher, never to fills, guardrails or real orders. */
 export const priceOverrides = new Map<string, { price: number; until: number }>();
@@ -81,6 +82,16 @@ export async function feedbackCommand(d: CommandDeps, payload: { thesisId?: stri
   return `recorded "${payload.answer}" and updated what the agent has learned`;
 }
 
+/** 100-cycle replay on historical prices. Starts in the background (it can take minutes) so other commands keep flowing. */
+export async function replayCommand(d: CommandDeps, payload: { llm?: boolean; seed?: number }): Promise<string> {
+  const running = await d.db.pool.query("select 1 from replay_runs where status='running' limit 1");
+  if (running.rowCount) return "a replay is already running";
+  const withLlm = payload?.llm === true;
+  const seed = Number.isInteger(payload?.seed) ? Number(payload.seed) : 42;
+  void runReplay100({ pool: d.db.pool, cycles: 100, seed, llm: withLlm ? d.llm : null, log: d.log }).catch((e) => d.log(`replay failed: ${(e as Error).message}`));
+  return `replay started (${withLlm ? "with Claude A/B" : "math only"}, seed ${seed}); progress shows on the Replay page`;
+}
+
 /** Claim and run pending commands from the dashboard. Each command is claimed atomically. */
 export async function pollCommands(d: CommandDeps) {
   const pending = await d.db.pool.query("select id,kind,payload from commands where status='pending' order by created_at limit 5");
@@ -93,6 +104,7 @@ export async function pollCommands(d: CommandDeps) {
       if (c.kind === "demo_idea") result = await demoIdea(d);
       else if (c.kind === "demo_price_move" && (c.payload?.outcome === "target" || c.payload?.outcome === "stop")) result = await demoPriceMove(d, c.payload.outcome);
       else if (c.kind === "feedback") result = await feedbackCommand(d, c.payload);
+      else if (c.kind === "replay_run") result = await replayCommand(d, c.payload);
       else {
         status = "failed";
         result = `unknown command ${c.kind}`;

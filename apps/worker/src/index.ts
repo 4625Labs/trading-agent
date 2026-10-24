@@ -20,6 +20,8 @@ import { startHealthServer, heartbeat } from "./health.ts";
 import { emit } from "./trace.ts";
 import { setUsageSink } from "./usage.ts";
 import { pollCommands, overriddenPrice, priceOverrides } from "./commands.ts";
+import { loadConfig, runCycle, updateCycleOutcomes, DEFAULT_CONFIG, type AgentConfig } from "./cycle.ts";
+import { recalibrateSim, loadLatestCalibration } from "./execgap.ts";
 
 const [cmd, arg] = process.argv.slice(2);
 const db = Db.fromEnv();
@@ -31,7 +33,10 @@ const getPrice = async (asset: string) => {
   return Number((await r.json()).price);
 };
 const sim = new Simulator(getPrice);
-const worker = new Worker(db, omnara, { synthetic: sim, real }, { simulateHuman: process.env.HIL_SIM === "1" });
+let currentCfg: AgentConfig = DEFAULT_CONFIG;
+const worker = new Worker(db, omnara, { synthetic: sim, real }, { simulateHuman: process.env.HIL_SIM === "1", realEnabled: () => currentCfg.realOrders });
+const cal = await loadLatestCalibration(db.pool).catch(() => null);
+if (cal) sim.configure(cal);
 // Persist every integration call for the dashboard's usage tiles (fire-and-forget).
 setUsageSink((r) => {
   void db.pool
@@ -98,6 +103,7 @@ every(15_000, "watcher", async () => {
   for (const c of await watcher.tick()) {
     const demo = priceOverrides.has(c.asset);
     await emit(db, "position_closed", `${c.asset} position closed at ${c.reason}${demo ? " (demo price move)" : ""}: ${c.pnl >= 0 ? "+" : ""}$${c.pnl.toFixed(2)}`, { reason: c.reason, pnl: c.pnl, demo }, c.thesisId);
+    if (demo) await db.pool.query("update theses set demo=true where id=$1", [c.thesisId]);
     priceOverrides.delete(c.asset);
   }
 });
@@ -125,34 +131,46 @@ if (cmd === "serve") every(60_000, "agents", loadActiveAgents);
 const cmdDeps = { db, omnara, agent: firstAgent, llm: anthropicLlm(), price: getPrice, walletUsd: async () => (real ? real.freeBalance("USDT") : 10_000), log };
 every(4_000, "commands", () => pollCommands(cmdDeps));
 
-// News -> signals -> thesis -> agent (which calls place_order; guardrails and approvals still apply).
+// Configurable cycles (agent_config), numbered in the `cycles` ledger: news -> signals -> ideas -> agent.
+// The agent still calls place_order, so guardrails and human approvals apply to every idea.
 if (autonomy) {
-  const cycle = async () => {
-    const a = firstAgent();
-    if (!a) return log("no active agent; skipping cycle");
-    const cycleStart = new Date();
-    const res = await runIngest(defaultIngestDeps(db, log));
-    heartbeat.ingest();
-    const fresh = (await db.pool.query("select id,asset,direction,confidence,magnitude,horizon,url,source_name,rationale from signals where created_at >= $1 order by created_at", [cycleStart])).rows;
-    await emit(db, "ingest", `Read ${res.articles} news articles from ${res.searches} searches, found ${res.inserted} new signals (${res.duplicates} already known)`, { ...res, sources: [...new Map(fresh.map((x) => [x.url, { title: x.source_name ?? x.url, url: x.url }])).values()] }, null, a);
-    for (const x of fresh) {
-      await emit(db, "signal", `${x.asset} looks ${x.direction === "long" ? "bullish" : "bearish"} (confidence ${Math.round(x.confidence * 100)}%)${x.source_name ? ` per ${x.source_name}` : ""}`, { id: x.id, asset: x.asset, direction: x.direction, confidence: x.confidence, magnitude: x.magnitude, horizon: x.horizon, url: x.url, source_name: x.source_name, rationale: x.rationale }, null, a);
-    }
-    const wallet = real ? await real.freeBalance("USDT") : 10_000;
-    const theses = await generateTheses({ ...pgThesisReaders(db), llm: anthropicLlm(), price: getPrice, walletUsd: Math.min(wallet, 5_000), log });
-    for (const t of theses.slice(0, 1)) {
-      const dup = await db.pool.query(
-        "select 1 from theses where asset=$1 and direction=$2 and status in ('proposed','pending_approval','executed') and created_at > now() - interval '6 hours' limit 1",
-        [t.asset, t.direction],
-      );
-      if (dup.rowCount) { log(`skip ${t.asset} ${t.direction}: similar thesis already active`); continue; }
-      await emit(db, "thesis_proposed", `Idea: ${t.direction} ${t.asset} $${t.size}. Why: ${t.rationale}`, { asset: t.asset, direction: t.direction, size: t.size, entry: t.entry, stop: t.stop, target: t.target, confidence: t.confidence, rationale: t.rationale, venueHint: t.venueHint, signalIds: t.signalIds }, null, a);
-      await proposeToAgent(omnara, a, t);
-      log(`proposed ${t.asset} ${t.direction} $${t.size} to the agent`);
-    }
+  const cycleDeps = {
+    db,
+    omnara,
+    agents: () => [...worker.agents],
+    llm: anthropicLlm(),
+    price: getPrice,
+    walletUsd: async () => Math.min(real ? await real.freeBalance("USDT") : 10_000, 5_000),
+    readers: pgThesisReaders(db),
+    log,
+    ingest: async () => {
+      const started = new Date();
+      const res = await runIngest(defaultIngestDeps(db, log));
+      heartbeat.ingest();
+      const fresh = (await db.pool.query("select id,asset,direction,confidence,magnitude,horizon,url,source_name,rationale from signals where created_at >= $1 order by created_at", [started])).rows;
+      for (const x of fresh) {
+        await emit(db, "signal", `${x.asset} looks ${x.direction === "long" ? "bullish" : "bearish"} (confidence ${Math.round(x.confidence * 100)}%)${x.source_name ? ` per ${x.source_name}` : ""}`, { id: x.id, asset: x.asset, direction: x.direction, confidence: x.confidence, magnitude: x.magnitude, horizon: x.horizon, url: x.url, source_name: x.source_name, rationale: x.rationale }, null, firstAgent());
+      }
+      return res;
+    },
   };
-  every(30 * 60_000, "cycle", cycle);
-  void cycle().catch((e) => log(`cycle error: ${(e as Error).message}`));
+  let lastRun = 0;
+  every(10_000, "cycle", async () => {
+    const cfg = await loadConfig(db);
+    currentCfg = cfg;
+    if (!cfg.enabled || Date.now() - lastRun < cfg.intervalSeconds * 1000) return;
+    lastRun = Date.now();
+    const r = await runCycle(cycleDeps, cfg);
+    log(`cycle #${r.cycleId.slice(0, 8)}: ${r.newSignals} new signals, ${r.ideas} ideas, ${r.proposed} proposed`);
+  });
+  every(60_000, "cycle-outcomes", () => updateCycleOutcomes(db));
+  every(30 * 60_000, "recalibrate", async () => {
+    const r = await recalibrateSim(db.pool, sim.config);
+    if (r.calibrated) {
+      sim.configure(r);
+      await emit(db, "learning", `Practice engine recalibrated from ${r.n} real fills: slippage ${r.slippageBps.toFixed(1)} bps, fees ${r.feeBps.toFixed(1)} bps`, { slippageBps: r.slippageBps, feeBps: r.feeBps, n: r.n });
+    }
+  });
 }
 
 await worker.run();

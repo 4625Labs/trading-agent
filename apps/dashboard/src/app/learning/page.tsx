@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import Icon from "@/components/Icon";
 import { Card, Empty, Err, Loading, Poll, ago, host, usePoll, Title } from "@/components/ui";
 
 function Generic({ rows }: { rows: any[] }) {
@@ -16,6 +18,7 @@ export default function Learning() {
     <>
       <Title icon="learning" at={at} error={error}>Learning</Title>
       <Err msg={error && !d ? error : null} />
+      <Link className="banner" href="/replay" style={{ textDecoration: "none", color: "inherit" }}><Icon name="cycle" size={18} /><div><b>100-cycle evidence</b><div className="small muted">See whether the learner improves over 100 replayed cycles, with charts and a verdict.</div></div></Link>
       {!d ? <Loading /> : (
         <>
           <Card title="Sources and weights">

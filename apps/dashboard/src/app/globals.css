@@ -147,3 +147,15 @@ input:focus{border-color:var(--violet);box-shadow:0 0 0 3px var(--glow1);outline
 .ep{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);gap:8px}
 /* hero stat */
 .fb-btns button{flex:1 1 120px}
+.legend{min-height:32px;padding:4px 10px;border-radius:99px;font-size:.78rem;font-weight:600;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--violet);min-height:32px}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+.presets button[aria-pressed=true]{background:var(--grad);color:#fff;border-color:transparent}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0}
+.toggle button{min-width:76px}.toggle button[aria-pressed=true]{background:linear-gradient(135deg,#059669,#10b981);color:#fff;border-color:transparent}
+.bar{height:10px;border-radius:99px;background:var(--glass2);overflow:hidden;border:1px solid var(--line)}
+.bar>i{display:block;height:100%;background:var(--grad);border-radius:99px;transition:width .6s}
+.verdict{font-size:1.25rem;font-weight:700;letter-spacing:-.01em;margin:6px 0}
+.pair{display:grid;gap:6px;margin:8px 0}.pair .r{display:grid;grid-template-columns:90px 1fr 70px;align-items:center;gap:8px;font-size:.8rem}
+.pair .r i{display:block;height:10px;border-radius:5px}
+select{font:inherit;background:var(--glass2);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:10px 12px;min-height:46px;width:100%}

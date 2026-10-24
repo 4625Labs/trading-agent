@@ -32,6 +32,16 @@ export class Simulator implements ExchangeAdapter {
     this.now = now;
   }
 
+  /** Change fee/slippage at runtime (applies to future fills and closes). Values are clamped to 0..500 bps. */
+  configure(cfg: Partial<SimConfig>) {
+    const c = (v: number) => Math.min(500, Math.max(0, v));
+    if (typeof cfg.slippageBps === "number" && Number.isFinite(cfg.slippageBps)) this.cfg = { ...this.cfg, slippageBps: c(cfg.slippageBps) };
+    if (typeof cfg.feeBps === "number" && Number.isFinite(cfg.feeBps)) this.cfg = { ...this.cfg, feeBps: c(cfg.feeBps) };
+  }
+  get config(): SimConfig {
+    return { ...this.cfg };
+  }
+
   price(asset: string) {
     return this.getPrice(asset);
   }

@@ -8,6 +8,7 @@ import { Badge, Card, Count, Empty, Err, Loading, Title, ago, pct, px, usePoll, 
 export default function Overview() {
   const { data: d, error, at } = usePoll<any>("/api/overview");
   const { data: u } = usePoll<any>("/api/usage", 15000);
+  const ex = usePoll<any>("/api/execution", 20000).data;
   const hb = d?.heartbeat;
   const runAge = hb?.lastRun ? (Date.now() - new Date(hb.lastRun.started_at).getTime()) / 1000 : null;
   const hl = hb?.health;
@@ -35,6 +36,11 @@ export default function Overview() {
           </section>
           <Card title="Integrations" icon="integrations" right={<Link className="small" href="/integrations">Details</Link>}>
             {u ? <Integrations usage={u} /> : <div className="sk" style={{ height: 120 }} />}
+          </Card>
+          <Card title="Sim vs real" icon="bars" right={<Link className="small" href="/execution">Details</Link>}>
+            {!ex ? <div className="sk" style={{ height: 56 }} /> : !ex.summary.n ? <div className="muted small">No closed long trades with a real fill yet. Shorts, demo trades and unfilled real legs are excluded.</div> : (
+              <div className="levels" style={{ marginTop: 0 }}><span>Compared <b>{ex.summary.n}</b></span><span>Avg slippage gap <b>{ex.summary.avgSlippageBps === null ? "-" : ex.summary.avgSlippageBps.toFixed(1) + " bps"}</b></span><span>Sim PnL <b>{usd(ex.summary.simPnl)}</b></span><span>Real PnL <b>{usd(ex.summary.realPnl)}</b></span></div>
+            )}
           </Card>
           <Card title="Cumulative PnL (USD)" icon="bars">
             <Chart series={[{ name: "Practice", color: "var(--c1)", pts: d.pnl.synthetic }, { name: "Real", color: "var(--c2)", pts: d.pnl.real }]} />
