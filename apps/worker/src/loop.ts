@@ -3,6 +3,7 @@ import type { Db } from "./db.ts";
 import type { Interaction, Omnara, ToolCall } from "./omnara.ts";
 import { evaluate } from "./guardrails.ts";
 import { heartbeat } from "./health.ts";
+import { emit } from "./trace.ts";
 
 export interface Venues {
   synthetic: ExchangeAdapter;
@@ -72,6 +73,7 @@ export class Worker {
 
     const d = evaluate(thesis, prefs, state);
     await this.db.logGuardrail(thesis.id, d);
+    await emit(this.db, "guardrail", d.verdict === "allow" ? `Safety check passed for ${thesis.asset} $${thesis.size}` : d.verdict === "block" ? `Safety check blocked ${thesis.asset} $${thesis.size}: ${d.reasons.join("; ")}` : `Safety check: ${thesis.asset} $${thesis.size} needs your approval (${d.reasons.join("; ")})`, { verdict: d.verdict, reasons: d.reasons }, thesis.id, agent);
     this.log(`guardrail ${d.verdict} for ${thesis.asset} $${thesis.size}${d.reasons.length ? ": " + d.reasons.join("; ") : ""}`);
 
     if (d.verdict === "block") {
@@ -87,14 +89,15 @@ export class Worker {
         return { ok: false, text: "REJECTED by the user. Do not retry." };
       }
       if (st !== "approved") {
+        if (thesis.status !== "pending_approval") await emit(this.db, "approval_requested", `Asked you to approve ${thesis.asset} ${thesis.direction} $${thesis.size}`, { status: "pending" }, thesis.id, agent);
         await this.db.setThesisStatus(thesis.id, "pending_approval");
         return { ok: false, text: `NEEDS_APPROVAL: ${d.reasons.join("; ")}. thesis_id=${thesis.id}` };
       }
     }
-    return this.execute(thesis);
+    return this.execute(thesis, agent);
   }
 
-  private async execute(t: Thesis): Promise<PlaceOrderResult> {
+  private async execute(t: Thesis, agent: string): Promise<PlaceOrderResult> {
     const synth: TradeResult = await this.venues.synthetic.placeOrder(t);
     await this.db.recordSynthetic(synth);
     let realNote = "no real venue configured";
@@ -105,10 +108,12 @@ export class Worker {
         await this.db.recordReal(real);
         realNote = `filled on ${real.venue}`;
       } catch (e) {
-        realNote = `real order failed: ${(e as Error).message}`;
+        const m = (e as Error).message;
+        realNote = /short/i.test(m) ? "skipped: the test exchange is spot-only, so shorts run on practice money only" : `real order failed: ${m}`;
       }
     }
     await this.db.setThesisStatus(t.id, "executed");
+    await emit(this.db, "order_executed", `Practice trade filled at ${synth.fillPrice.toFixed(2)}${real ? `; real testnet order filled at ${real.fillPrice.toFixed(2)}` : this.venues.real ? "; real exchange skipped" : ""}`, { synthetic: { fillPrice: synth.fillPrice, qty: synth.qty, fee: synth.fee }, real: real ? { fillPrice: real.fillPrice, qty: real.qty, fee: real.fee } : undefined, realNote }, t.id, agent);
     this.log(`executed ${t.asset}: synthetic fill ${synth.fillPrice.toFixed(2)}; ${realNote}`);
     return { ok: true, text: `Executed. Synthetic fill ${synth.fillPrice.toFixed(2)}; real: ${realNote}.`, data: { synthetic: synth, real } };
   }
@@ -128,6 +133,7 @@ export class Worker {
       if (label === undefined) { this.log("could not read the chosen option from the resolved interaction"); continue; }
       const approved = /^approve/i.test(label);
       await this.db.decideApproval(m[1], approved ? "approved" : "rejected", approved ? undefined : label);
+      await emit(this.db, "approval_decided", approved ? "You approved the trade" : `You rejected the trade (${label})`, { status: approved ? "approved" : "rejected", answer: label, via: "omnara question" }, m[1], agent);
       this.log(`human ${approved ? "APPROVED" : "REJECTED"} thesis ${m[1]} (answer: ${label})`);
     }
   }

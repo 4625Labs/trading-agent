@@ -15,6 +15,7 @@ export default function Feed() {
                 <div className="row"><div><b>{t.asset}</b> <Badge s={t.direction} /></div><Badge s={t.status ?? "open"} /></div>
                 <p>{t.rationale || "No rationale recorded."}</p>
                 <div className="levels"><span>Entry <b>{px(t.entry)}</b></span><span>Stop <b>{px(t.stop)}</b></span><span>Target <b>{px(t.target)}</b></span><span>Size <b>{usd(t.size)}</b></span><span>Conf <b>{pct(t.confidence)}</b></span><span className="muted">{ago(t.created_at)}</span></div>
+                <a className="tracelink" href={`/trace/${t.id}`}>Why this trade?</a>
               </div>
             ))}
           </Card>

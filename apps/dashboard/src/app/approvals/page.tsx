@@ -35,6 +35,7 @@ export default function Approvals() {
                   <div className="row"><div><b>{a.asset}</b> <Badge s={a.direction} /> <span className="num">{usd(a.size)}</span></div><span className="muted">{ago(a.requested_at)}</span></div>
                   <p>{a.rationale || "No rationale recorded."}</p>
                   <div className="levels"><span>Entry <b>{px(a.entry)}</b></span><span>Stop <b>{px(a.stop)}</b></span><span>Target <b>{px(a.target)}</b></span><span>Conf <b>{pct(a.confidence)}</b></span></div>
+                  <a className="tracelink" href={`/trace/${a.thesis_id}`}>Why this trade?</a>
                   {s ? <div className="ok">Sent ({s}), waiting for worker to record it...</div> : (
                     <>
                       <div className="btns">

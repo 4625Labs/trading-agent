@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-const items = [["/", "Overview"], ["/feed", "Feed"], ["/approvals", "Approvals"], ["/safety", "Safety"], ["/learning", "Learning"], ["/preferences", "Prefs"]];
+const items = [["/", "Overview"], ["/feed", "Feed"], ["/approvals", "Approvals"], ["/trace", "Trace"], ["/safety", "Safety"], ["/learning", "Learning"], ["/preferences", "Prefs"]];
 export default function Nav() {
   const p = usePathname();
   if (p === "/login") return null;

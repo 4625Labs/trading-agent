@@ -17,6 +17,7 @@ import { runIngest, defaultIngestDeps } from "./ingest/index.ts";
 import { generateTheses, pgThesisReaders, proposeToAgent } from "./thesis/index.ts";
 import { anthropicLlm } from "./ingest/llm.ts";
 import { startHealthServer, heartbeat } from "./health.ts";
+import { emit } from "./trace.ts";
 
 const [cmd, arg] = process.argv.slice(2);
 const db = Db.fromEnv();
@@ -84,15 +85,26 @@ every(60_000, "wallet", snapshot);
 
 // Close-out (stop/target), human feedback, learning.
 const watcher = new Watcher(db, getPrice, sim, real);
-void watcher.run(15_000);
+every(15_000, "watcher", async () => {
+  for (const c of await watcher.tick()) {
+    await emit(db, "position_closed", `${c.asset} position closed at ${c.reason}: ${c.pnl >= 0 ? "+" : ""}$${c.pnl.toFixed(2)}`, { reason: c.reason, pnl: c.pnl }, c.thesisId);
+  }
+});
 const firstAgent = () => [...worker.agents][0];
 every(20_000, "feedback", async () => {
   const a = firstAgent();
   if (!a) return;
   await askPendingFeedback(db, omnara, a, { max: 1, log });
-  await syncFeedback(db, omnara, a, { log });
+  const n = await syncFeedback(db, omnara, a, { log });
+  if (n) {
+    const fresh = await db.pool.query("select id,feedback from theses where feedback is not null and id not in (select thesis_id from agent_events where kind='feedback' and thesis_id is not null)");
+    for (const r of fresh.rows) await emit(db, "feedback", `You said: ${r.feedback}`, { answer: r.feedback }, r.id);
+  }
 });
-every(5 * 60_000, "learning", () => runLearningCycle({ pool: db.pool, log }));
+every(5 * 60_000, "learning", async () => {
+  const r = await runLearningCycle({ pool: db.pool, log });
+  if (r.trades > 0) await emit(db, "learning", `Learning update from ${r.trades} closed trades: ${r.lessonsWritten} lessons`, { closedTrades: r.trades, lessons: r.lessonsWritten, brier: r.brier, weights: r.weights });
+});
 if (cmd === "serve") every(60_000, "agents", loadActiveAgents);
 
 // News -> signals -> thesis -> agent (which calls place_order; guardrails and approvals still apply).
@@ -100,8 +112,14 @@ if (autonomy) {
   const cycle = async () => {
     const a = firstAgent();
     if (!a) return log("no active agent; skipping cycle");
-    await runIngest(defaultIngestDeps(db, log));
+    const cycleStart = new Date();
+    const res = await runIngest(defaultIngestDeps(db, log));
     heartbeat.ingest();
+    const fresh = (await db.pool.query("select id,asset,direction,confidence,magnitude,horizon,url,source_name,rationale from signals where created_at >= $1 order by created_at", [cycleStart])).rows;
+    await emit(db, "ingest", `Read ${res.articles} news articles from ${res.searches} searches, found ${res.inserted} new signals (${res.duplicates} already known)`, { ...res, sources: [...new Map(fresh.map((x) => [x.url, { title: x.source_name ?? x.url, url: x.url }])).values()] }, null, a);
+    for (const x of fresh) {
+      await emit(db, "signal", `${x.asset} looks ${x.direction === "long" ? "bullish" : "bearish"} (confidence ${Math.round(x.confidence * 100)}%)${x.source_name ? ` per ${x.source_name}` : ""}`, { id: x.id, asset: x.asset, direction: x.direction, confidence: x.confidence, magnitude: x.magnitude, horizon: x.horizon, url: x.url, source_name: x.source_name, rationale: x.rationale }, null, a);
+    }
     const wallet = real ? await real.freeBalance("USDT") : 10_000;
     const theses = await generateTheses({ ...pgThesisReaders(db), llm: anthropicLlm(), price: getPrice, walletUsd: Math.min(wallet, 5_000), log });
     for (const t of theses.slice(0, 1)) {
@@ -110,6 +128,7 @@ if (autonomy) {
         [t.asset, t.direction],
       );
       if (dup.rowCount) { log(`skip ${t.asset} ${t.direction}: similar thesis already active`); continue; }
+      await emit(db, "thesis_proposed", `Idea: ${t.direction} ${t.asset} $${t.size}. Why: ${t.rationale}`, { asset: t.asset, direction: t.direction, size: t.size, entry: t.entry, stop: t.stop, target: t.target, confidence: t.confidence, rationale: t.rationale, venueHint: t.venueHint, signalIds: t.signalIds }, null, a);
       await proposeToAgent(omnara, a, t);
       log(`proposed ${t.asset} ${t.direction} $${t.size} to the agent`);
     }
