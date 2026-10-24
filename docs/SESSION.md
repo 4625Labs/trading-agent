@@ -132,7 +132,17 @@ Think of it as a careful junior analyst who:
 | Claude **without** lessons | +$46 | 97 | 59% | $9 |
 | Claude **with** lessons | -$12 | 125 | 42% | $40 |
 
-**Honest reading:** giving Claude our learned lessons did **not** help in this run. It traded more and won less, ending $58 behind. One run is a single noisy path, so we cannot say lessons *hurt* either, but we certainly cannot claim they help. We do not yet know why; the likely suspect is the lesson wording nudging Claude into extra trades. This is the first thing to investigate, and we would show this result rather than hide it.
+**Honest reading:** giving Claude our learned lessons did **not** help in this run. It traded more and won less, ending $58 behind. One run is a single noisy path, so we cannot say lessons *hurt* with certainty, but we cannot claim they help.
+
+**Why (diagnosed afterwards, medium confidence, from 10-round windows):**
+- The lessons were a long alphabetical list (up to 24) of commands like "reduce size or skip", many repeating the same fact, some resting on fewer than 8 trades.
+- They were **cumulative**, so they lagged the market: at round 60 they said "BTC shorts win, BTC longs lose"; Claude went all-short and sized 2 to 4 times bigger, and lost all 10 trades after the market had turned.
+- A **real bug**: the learner credited a source for every trade on an asset even when that source's signal pointed the other way.
+- Some of Claude's replies were cut off (4 of 10 calls in one window failed); the no-lessons arm had none.
+
+**What we changed (live agent, deployed):** a source is credited only when its signal agreed with the trade; duplicate lessons are merged; a lesson needs at least 8 trades; the idea-writing prompt now shows what the agent has noticed as **weak evidence with counts** ("observed 20 wins in 23 resolved BTC short trades; not statistically significant"), at most 3, never as commands, with an explicit "do not use this to increase size or trade count". Your own feedback ("Too risky" etc.) is still treated as a preference to respect.
+
+**What we have NOT shown:** that the fix works. A rewritten version tested on one 10-round window cut the loss from -7.45 to -1.58 USD but still over-traded. A proper test needs full 100-round runs on several random seeds, judged on drawdown and number of trades as well as profit, about 198 Claude calls per run. Not yet run.
 
 **Live version:** each closed trade plus your feedback adds a lesson and nudges source trust; the Learning page shows it.
 

@@ -136,7 +136,11 @@ We then asked whether giving Claude our learned lessons improves its own trade i
 | without lessons | +46 USD | 97 | 59% |
 | **with** lessons | −12 USD | 125 | 42% |
 
-Lessons **did not help**; the lessons arm traded more and won less. One run is a single noisy path, so we do not claim the lessons hurt, only that we cannot claim they help. We are investigating why (the prime suspects are directive lesson wording and lessons drawn from very small samples), and we chose to publish the result rather than hide it.
+Lessons **did not help**; the lessons arm traded more and won less. One run is a single noisy path, so we do not claim the lessons hurt, only that we cannot claim they help.
+
+We then diagnosed it, which was the most instructive part of the project. We re-created the exact lesson text Claude saw and found four problems: the lessons were a long alphabetical list of **commands** ("reduce size or skip"), many repeated the same fact, many rested on tiny samples, and, worst, they were **cumulative**, so they lagged the market. In one window the lessons said "BTC shorts win"; Claude went all-short at two to four times the size just as the market turned, and lost all ten trades. We also found a genuine bug in our own learner: it credited a news source for *every* trade on an asset, even when that source had pointed the other way.
+
+We fixed the live agent: a source gets credit only when its signal agreed with the trade, duplicate lessons are merged, a lesson needs at least eight trades behind it, and the prompt now presents what the agent has noticed as **weak evidence with counts** and says plainly not to size up or trade more because of it. A rewritten version tested on one ten-round window cut the damage (from −7.45 to −1.58 USD) but still over-traded, so **we have not shown the fix works.** A fair test needs full 100-round runs on several random seeds, judged on drawdown and trade count as well as profit, and we have not run it.
 
 Other lessons, in short:
 
@@ -154,7 +158,7 @@ Other lessons, in short:
 
 ### What is next
 
-- Find out why the lessons hurt and test a fix on a full run.
+- Run the full multi-seed test of the lessons fix (judged on drawdown and trade count, not just profit).
 - Replace single-path replay with many seeds and longer history to tighten the statistics.
 - Add more genuinely independent signal sources, since two of our four price-based ones carried most of the weight.
 - A perpetuals venue so that shorts get a real leg and the simulation-versus-reality comparison covers both sides.
