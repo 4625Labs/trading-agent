@@ -110,6 +110,8 @@ async function writeEnv(vm) {
     if (v === undefined || v === "") continue;
     lines.push(`${k}=${JSON.stringify(v)}`); names.push(k);
   }
+  // The dashboard and worker share one VM, so the dashboard reads worker health over localhost.
+  if (!names.includes("WORKER_HEALTH_URL")) { lines.push(`WORKER_HEALTH_URL=${JSON.stringify("http://127.0.0.1:8080/health")}`); names.push("WORKER_HEALTH_URL"); }
   await vm.fs.writeFile("/root/app/.env", lines.join("\n") + "\n", { mode: 0o600 });
   await sh(vm, "chmod 600 /root/app/.env");
   log(`wrote /root/app/.env with ${names.length} vars: ${names.join(", ")}`);

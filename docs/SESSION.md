@@ -60,7 +60,7 @@ Think of it as a careful junior analyst who:
 ### Honest limits (say these out loud to judges)
 - The demo uses **practice money on a test exchange**, not real funds.
 - Price moves in the demo are **simulated and labelled as such**. Real trades close when the real price hits the limits.
-- Learning is shown on **replayed history** and on short live runs. We do not claim it beats the market.
+- Learning is shown on **replayed history** and on short live runs. On real price data the improvement is **within statistical noise**, and we say so. We do not claim it beats the market.
 - The practice exchange only supports buying, so **"short" ideas run on pretend money only.**
 - Most news is low-confidence, so on its own the agent proposes few trades. That is by design.
 - This is **not financial advice.**
@@ -87,9 +87,12 @@ Think of it as a careful junior analyst who:
 - **Human approvals (Omnara):** approve, reject, small trade goes straight through, and oversize trade is blocked. All tried by hand in the browser. Approving from our own dashboard also works.
 - **Close-out and learning:** positions close at stop or target; source weights, confidence calibration, and lessons update. Human feedback is collected directly in the dashboard and applied by the worker.
 - **Dashboard** (password protected, installable on a phone): Overview, Feed, Approvals plus "How did we do?" feedback, Demo (guided steps), Trace ("why this trade?" timeline), Integrations (call counts), Safety (kill switch), Learning, Preferences. Top navigation, modern dark theme with light option.
+- **Configurable cycles:** the agent's schedule is editable from the dashboard (interval from 2 minutes up, coins, confidence bar, trades per cycle, trade size, real orders on or off). Every cycle is numbered in a ledger with what it read, proposed, closed and earned.
+- **100-cycle replay:** walks forward through about 17 days of real 4-hour prices, 100 decision rounds, using the same safety, practice-trade and learning code as the live agent. One button on the dashboard; runs in about 30 seconds. An optional version has Claude write the trade ideas with and without the learned lessons.
+- **Practice vs real comparison ("Execution" page):** for each long trade, practice fill vs real fill, fees and profit, with the practice engine nudging its own slippage and fee settings toward what real fills show. Shorts and demo trades are excluded and counted.
 - **Integration usage tracking:** every call to context.dev, Claude, Binance testnet and Omnara is counted. At last check context.dev showed 3 calls, no errors, and 1,025 credits remaining.
 - **Database** (Supabase): 12 tables, access locked down, all changes recorded.
-- **Tests:** 46 automated tests for the worker and 3 for the dashboard, all passing.
+- **Tests:** 57 automated tests for the worker (plus 2 skipped) and 3 for the dashboard, all passing, including a proof that the replay cannot see the future.
 
 **Proven live**
 - Full chain on the deployed system: news, signals, idea, safety check, approval, practice trade, simulated price move, close, trace.
@@ -104,14 +107,32 @@ Think of it as a careful junior analyst who:
 
 ---
 
-## Part 3. How we prove it learns
+## Part 3. How we prove it learns (and what we can honestly claim)
 
-**Test (replay on real past prices, 300 rounds, three pretend news sources whose true quality we secretly set: one good, one random, one backwards):**
-- The agent worked out the order on its own: final trust good 1.88, random 0.85, backwards 0.27.
-- It earned **+$36 (64% of trades won)** versus **-$72 (52% won)** for a version that treats all sources equally.
-- Confidence calibration improved only slightly (0.2294 to 0.2280). We will not highlight that number.
+**What the 100-cycle replay does:** at each of 100 decision rounds the agent sees only information from before that moment, trades with pretend money, and learns only from trades that have already finished. Two versions run side by side on the same data: one that **learns** which news sources to trust, and one that treats all sources equally.
 
-**What this proves:** the learning machinery responds to evidence. **What it does not prove:** that the AI's real news signals are profitable. We say "replay on history", never "live profit".
+**Results (seed 42, 100 cycles, real historical prices):**
+| | Learner | Equal-weight baseline |
+|---|---|---|
+| Final profit (pretend money) | +$124 | +$74 |
+| Trades won | 55% | 47% |
+
+**Read this carefully:**
+- The learner finished $50 ahead, but that gap is **not statistically distinguishable from luck** (the test says so: z=1.43).
+- Using **only the real price-based sources**, the learner finished $3 *behind*. We **cannot claim it beats the baseline on real signals.**
+- Both versions did better in the second half. That is mostly the market, since the baseline improved too. It is **not** proof of learning.
+- What **is** proven: given sources whose quality we secretly set (one good, one random, one backwards), the agent correctly ranked them good > random > backwards. So the learning mechanism **works when a real edge exists**. It also found that "fade the extremes" lost on this data and "follow breakouts and momentum" worked, which matches what the numbers showed.
+- One path, about 17 days of data, high variance. It is a historical replay, not live trading.
+
+**What to say to judges (updated):** "We tested whether the agent can tell good information from bad. It can, when there is signal to find. On real price data over 100 rounds the improvement is within noise, and the dashboard says so on screen. We would rather show you an honest chart than a flattering one."
+
+**Claude A/B (done, 198 Claude calls):** the same 100 rounds with Claude writing the trade ideas, once with the learned lessons and once without.
+| | Profit | Trades | Won | Worst dip |
+|---|---|---|---|---|
+| Claude **without** lessons | +$46 | 97 | 59% | $9 |
+| Claude **with** lessons | -$12 | 125 | 42% | $40 |
+
+**Honest reading:** giving Claude our learned lessons did **not** help in this run. It traded more and won less, ending $58 behind. One run is a single noisy path, so we cannot say lessons *hurt* either, but we certainly cannot claim they help. We do not yet know why; the likely suspect is the lesson wording nudging Claude into extra trades. This is the first thing to investigate, and we would show this result rather than hide it.
 
 **Live version:** each closed trade plus your feedback adds a lesson and nudges source trust; the Learning page shows it.
 
@@ -143,8 +164,8 @@ Four shields: You set the limits | Hard safety rules | Everything shown in the T
 **Image 4: "How it keeps running" (for the technical judges)**
 Cloud box (Freestyle): Agent worker + Dashboard. Arrows to: Supabase (memory), Omnara (approvals and the agent's brain), context.dev (reads the web), Claude (reads and writes), Binance testnet (practice exchange). Label: "Runs without the laptop."
 
-**Image 5: "Learning curve"**
-Line chart: "treats all news equally" (falls, ends -$72) versus "learns who to trust" (rises, ends +$36). Caption: "Replay on past prices, 300 rounds."
+**Image 5: "Does it learn?" (honest version)**
+Two panels. Left: "Can it tell good news from bad?" with bars good / random / backwards showing the learned trust ranking (yes). Right: a two-line chart of profit over 100 rounds, learner vs equal-weight, with the label "within noise on real data" and the footer "Replay on past prices, 100 rounds. Not live trading."
 
 ---
 

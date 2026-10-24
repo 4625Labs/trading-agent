@@ -10,7 +10,7 @@ async function worker() {
     const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
     const r = await fetch(url, { signal: ctl.signal, cache: "no-store" }); clearTimeout(t);
     let up: number | undefined;
-    try { const j = await r.json(); const u = j?.uptimeSec ?? j?.uptime_s ?? j?.uptime; if (typeof u === "number") up = u; } catch { /* not json */ }
+    try { const j = await r.json(); const u = j?.uptimeSec ?? j?.uptimeS ?? j?.uptime_s ?? j?.uptime; if (typeof u === "number") up = u; } catch { /* not json */ }
     return { ok: r.ok, uptimeSec: up ?? null };
   } catch { return { ok: false, uptimeSec: null }; }
 }
