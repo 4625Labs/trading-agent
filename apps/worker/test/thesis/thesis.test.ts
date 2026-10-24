@@ -50,3 +50,39 @@ test("generateTheses empty without signals; proposeToAgent sends exact fields", 
   await proposeToAgent({ send: async (_a: string, text: string) => { sent = text; } } as any, "ag", v.thesis);
   assert.equal(sent, proposalText(v.thesis)); assert.match(sent, /"entry":80000/); assert.match(sent, /place_order/);
 });
+
+test("prompt splits user preferences from learner observations; caps 3, drops n<8 and legacy directive rows", () => {
+  const p = buildThesisPrompt({
+    signals: [sig], prefs, prices: { BTC: 80000 }, walletUsd: 1000,
+    lessons: [
+      { text: "Keep SOL positions small", origin: "human_feedback" },
+      { text: "Observed 2 wins in 16 resolved ETH long trades; more losses than wins, still a small sample.", origin: "learner" },
+      { text: "Observed 20 wins in 23 resolved BTC short trades; suggestive but still a small sample.", origin: "learner" },
+      { text: "Observed 5 wins in 7 resolved SOL long trades; not statistically significant, may be chance.", origin: "learner" },
+      { text: "Observed 9 wins in 16 resolved BTC long trades; not statistically significant, may be chance.", origin: "learner" },
+      { text: "Observed 12 wins in 20 resolved ETH short trades; not statistically significant, may be chance.", origin: "learner" },
+      { text: "BTC longs from source x lost 4/5 (net -1 USD); reduce size or skip.", origin: "learner" },
+    ],
+  });
+  const [prefsPart, obsPart] = p.split("OBSERVATIONS SO FAR");
+  assert.match(prefsPart, /Keep SOL positions small/);
+  assert.ok(!/Observed/.test(prefsPart));
+  const obsLines = obsPart.split("\n").filter((l) => l.startsWith("- Observed"));
+  assert.equal(obsLines.length, 3);
+  assert.match(obsLines[0], /20 wins in 23/); // strongest evidence first
+  assert.ok(!/7 resolved SOL/.test(obsPart)); // n<8 gate
+  assert.ok(!/reduce size|skip/.test(p.split("SIGNALS")[0]));
+  assert.match(p, /do NOT use them to increase size or the number of trades/);
+});
+test("plain-string callers: observation-format strings are split out, legacy directive strings dropped", () => {
+  const p = buildThesisPrompt({ signals: [sig], prefs, prices: { BTC: 1 }, walletUsd: 1000, lessons: ["Avoid SOL shorts", "Observed 10 wins in 10 resolved BTC short trades; suggestive but still a small sample.", "ETH shorts lost 4/5; reduce size or skip."] });
+  assert.match(p.split("OBSERVATIONS SO FAR")[0], /Avoid SOL shorts/);
+  assert.match(p.split("OBSERVATIONS SO FAR")[1], /Observed 10 wins/);
+  assert.ok(!/reduce size/.test(p));
+});
+test("generateTheses prefers lessonRows with origin", async () => {
+  let seen = "";
+  await generateTheses({ llm: async (r) => { seen = r.prompt; return '{"theses":[]}'; }, readSignals: async () => [sig], prefs: async () => prefs, lessons: async () => ["SHOULD NOT APPEAR"], lessonRows: async () => [{ text: "User likes BTC", origin: "human_feedback" }], price: async () => 80000, walletUsd: 1000 });
+  assert.match(seen, /User likes BTC/);
+  assert.ok(!/SHOULD NOT APPEAR/.test(seen));
+});

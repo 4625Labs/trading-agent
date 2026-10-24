@@ -87,6 +87,9 @@ test("v1 prompt unchanged, v2 prompt carries the weak-evidence note", async () =
   const d = llmDecider(llm as any);
   await d("llm_lessons", { ...ctx, lessonStyle: "v1" });
   await d("llm_lessons", { ...ctx, lessonStyle: "v2" });
+  await d("llm_lessons", { ...ctx, lessonStyle: "v3" });
   assert.match(seen[0], /Lessons learned so far:\n- x$/);
   assert.match(seen[1], /Observations so far:\n- x\n\nNote on lessons: they are weak/);
+  assert.ok(!/Do not increase size/.test(seen[1]));
+  assert.match(seen[2], /Do not increase size or trade count because of these observations\./);
 });

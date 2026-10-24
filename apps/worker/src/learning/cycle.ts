@@ -76,8 +76,10 @@ export async function runLearningCycle(d: CycleDeps): Promise<CycleResult> {
   }
 
   const lessons = lessonsFromTrades(trades, { ...DEFAULT_LESSON_OPTS, ...d.lessonOpts, sourceLabel: (id) => labels[id] ?? id });
+  // drop stale learner lessons (including legacy directive ones) that are no longer supported
+  await d.pool.query("delete from lessons where origin='learner' and (key is null or key <> all($1::text[]))", [lessons.map((l) => l.key)]);
   for (const l of lessons) {
-    await d.pool.query("insert into lessons(text,origin,key) values ($1,'learner',$2) on conflict (key) do update set text=excluded.text", [l.text, l.key]);
+    await d.pool.query("insert into lessons(text,origin,key) values ($1,'learner',$2) on conflict (key) do update set text=excluded.text, created_at=now()", [l.text, l.key]);
   }
   if (d.summarizer && lessons.length) {
     const text = await d.summarizer(lessons).catch(() => "");

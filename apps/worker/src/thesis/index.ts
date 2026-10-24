@@ -18,6 +18,8 @@ export interface ThesisDeps {
   prefs: () => Promise<Preferences>;
   /** latest lesson texts, newest first */
   lessons: () => Promise<string[]>;
+  /** optional: lessons with origin, so the prompt can split user preferences from learner observations (preferred over `lessons`) */
+  lessonRows?: () => Promise<{ text: string; origin: string | null }[]>;
   /** current price for an asset (e.g. BinanceTestnetAdapter.price) */
   price: (asset: string) => Promise<number>;
   walletUsd: number | (() => Promise<number>);
@@ -36,8 +38,13 @@ export function pgThesisReaders(db: Db, lessonLimit = 10) {
       );
       return r.rows.map((x) => ({ ...x, magnitude: +x.magnitude, confidence: +x.confidence, weight: +x.weight }));
     },
+    async lessonRows(): Promise<{ text: string; origin: string | null }[]> {
+      return (await db.pool.query("select text, origin from lessons order by created_at desc limit $1", [lessonLimit * 2])).rows;
+    },
     async lessons(): Promise<string[]> {
-      return (await db.pool.query("select text from lessons order by created_at desc limit $1", [lessonLimit])).rows.map((x) => x.text);
+      // learner rows only if they are in the new descriptive format (legacy directive rows are not shown to the model)
+      const rows = (await db.pool.query("select text, origin from lessons order by created_at desc limit $1", [lessonLimit * 2])).rows;
+      return rows.filter((x) => !/^learner/.test(x.origin ?? "") || /^Observed \d+ wins in \d+ resolved/.test(x.text)).map((x) => x.text);
     },
   };
 }
@@ -45,7 +52,7 @@ export function pgThesisReaders(db: Db, lessonLimit = 10) {
 /** Propose validated theses from recent signals. Invalid proposals are dropped (and logged). Never invents prices. */
 export async function generateTheses(deps: ThesisDeps): Promise<ProposedThesis[]> {
   const log = deps.log ?? (() => {});
-  const [signals, prefs, lessons] = await Promise.all([deps.readSignals(), deps.prefs(), deps.lessons()]);
+  const [signals, prefs, lessons] = await Promise.all([deps.readSignals(), deps.prefs(), deps.lessonRows ? deps.lessonRows() : deps.lessons()]);
   if (!signals.length) { log("thesis: no recent signals"); return []; }
   const walletUsd = typeof deps.walletUsd === "function" ? await deps.walletUsd() : deps.walletUsd;
   const assets = [...new Set(signals.map((s) => s.asset))].filter((a) => prefs.allowedAssets.includes(a) && !prefs.bannedAssets.includes(a));

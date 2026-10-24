@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { sourceStats } from "../../src/learning/stats.ts";
 import { updateSourceWeights, targetWeight, weightedVote } from "../../src/learning/weights.ts";
 import { brier, fitCalibration, confidenceAdjust, reliabilityBins } from "../../src/learning/calibration.ts";
-import { lessonsFromTrades } from "../../src/learning/lessons.ts";
+import { lessonsFromTradesV1 as lessonsFromTrades, lessonsFromTrades as liveLessons, observationText, topObservations } from "../../src/learning/lessons.ts";
 import type { ClosedTrade } from "../../src/learning/types.ts";
 
 const tr = (pnl: number, src = "X", dir: "long" | "short" = "long", asset = "SOL", sigDir = dir): ClosedTrade => ({ thesisId: Math.random().toString(), asset, direction: dir, confidence: 0.8, pnl, signals: [{ sourceId: src, direction: sigDir, confidence: 0.8 }] });
@@ -49,4 +49,37 @@ test("lessons: deterministic, thresholded", () => {
   assert.match(l[1].text, /SOL longs from source src-X lost 4\/5.*reduce size/);
   assert.deepEqual(l, lessonsFromTrades(trades, { minTrials: 5, loseRate: 0.6, winRate: 0.8, sourceLabel: (s) => `src-${s}` }));
   assert.equal(lessonsFromTrades(trades.slice(0, 3)).length, 0);
+});
+
+const mt = (pnl: number, asset: string, dir: "long" | "short", sigs: [string, "long" | "short"][]): ClosedTrade => ({ thesisId: Math.random().toString(), asset, direction: dir, confidence: 0.6, pnl, signals: sigs.map(([sourceId, direction]) => ({ sourceId, direction, confidence: 0.6 })) });
+test("observationText wording: below 50% says more losses than wins, never 'suggestive'", () => {
+  assert.match(observationText("BTC long trades", 2, 16), /more losses than wins, still a small sample/);
+  assert.match(observationText("BTC long trades", 5, 12), /more losses than wins, not statistically significant/);
+  assert.match(observationText("BTC long trades", 20, 23), /suggestive but still a small sample/);
+  assert.match(observationText("BTC long trades", 7, 12), /not statistically significant, may be chance/);
+  assert.ok(!/reduce|avoid|skip|should|must/i.test(observationText("x", 1, 10)));
+});
+test("live lessons: min sample 8, agreeing sources only, identical stats collapse, ranked, no imperatives", () => {
+  const trades = [
+    ...Array.from({ length: 10 }, () => mt(1, "BTC", "short", [["a", "short"], ["b", "short"], ["c", "long"]])), // c disagreed with winning trades
+    ...Array.from({ length: 7 }, () => mt(-1, "SOL", "long", [["d", "long"]])), // n=7 gated
+  ];
+  const L = liveLessons(trades);
+  assert.equal(L.filter((l) => /SOL/.test(l.text)).length, 0);
+  const ad = L.find((l) => l.key === "ad:BTC:short")!;
+  assert.match(ad.text, /Observed 10 wins in 10 resolved BTC short trades.*sources that agreed: a, b\)/);
+  const src = L.filter((l) => l.key.startsWith("src:"));
+  assert.equal(src.length, 1); // a and b have identical stats -> one lesson
+  assert.match(src[0].text, /each of the sources a, b agreed/);
+  assert.ok(!L.some((l) => /\bc\b.*agreed|source c/.test(l.text)));
+  assert.ok(L.every((l) => !/reduce|avoid|skip|trust it more/i.test(l.text)));
+  assert.deepEqual(L, liveLessons(trades));
+  assert.equal(liveLessons(trades.slice(0, 7)).length, 0);
+});
+test("topObservations: n gate, rank, cap, dedupe", () => {
+  const t = ["Observed 5 wins in 6 resolved a; x.", "Observed 9 wins in 10 resolved b; x.", "Observed 9 wins in 10 resolved b; x.", "Observed 6 wins in 12 resolved c; x.", "Observed 1 wins in 9 resolved d; x.", "Observed 3 wins in 9 resolved e; x.", "junk"];
+  const r = topObservations(t);
+  assert.equal(r.length, 3);
+  assert.match(r[0], /resolved d|resolved b/);
+  assert.ok(!r.some((x) => /resolved a;/.test(x)));
 });

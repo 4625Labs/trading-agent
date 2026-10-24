@@ -4,7 +4,7 @@ import { mulberry32 } from "../learning/replay.ts";
 import { sourceStats } from "../learning/stats.ts";
 import { updateSourceWeights, weightedVote, DEFAULT_WEIGHT_OPTS } from "../learning/weights.ts";
 import { brier } from "../learning/calibration.ts";
-import { lessonsFromTrades } from "../learning/lessons.ts";
+import { lessonsFromTradesV1 as lessonsFromTrades, observationText, zScore } from "../learning/lessons.ts";
 import type { ClosedTrade, SignalRef } from "../learning/types.ts";
 import { technicalSignals, plantedSignals, clamp, type SrcSignal, type Dir } from "./sources.ts";
 
@@ -14,7 +14,7 @@ export const ASSETS = ["BTC", "ETH", "SOL"];
 
 export type ArmName = "learner" | "baseline" | "llm_lessons" | "llm_nolessons";
 export interface Decision { asset: string; direction: Dir; size: number; confidence: number }
-export type LessonStyle = "v1" | "v2";
+export type LessonStyle = "v1" | "v2" | "v3";
 export interface LlmResult { decisions: Decision[] | null; raw?: string; lessons?: string[] }
 export interface LlmDecider {
   (arm: "llm_lessons" | "llm_nolessons", ctx: { signals: SrcSignal[]; prices: Record<string, number>; hitRates: Record<string, { rate: number; trials: number }>; lessons: string[]; lessonStyle?: LessonStyle }): Promise<LlmResult | null>;
@@ -33,10 +33,10 @@ export function lessonsV2(trades: ClosedTrade[], minN = 8, top = 3): string[] {
   }
   return [...g]
     .filter(([, x]) => x.n >= minN)
-    .map(([k, x]) => ({ k, x, z: Math.abs(x.wins - x.n / 2) / Math.sqrt(x.n / 4) }))
+    .map(([k, x]) => ({ k, x, z: zScore(x.wins, x.n) }))
     .sort((a, b) => b.z - a.z || a.k.localeCompare(b.k))
     .slice(0, top)
-    .map(({ x, z }) => `Observed ${x.wins} wins in ${x.n} resolved ${x.label}; ${z < 2 ? "not statistically significant, may be chance" : "suggestive but still a small sample"}.`);
+    .map(({ x }) => observationText(x.label, x.wins, x.n));
 }
 export interface CycleRow {
   n: number; arm: ArmName; simTs: string; trades: number; pnl: number; cumPnl: number; hitRate20: number | null; brier: number | null;
@@ -149,7 +149,7 @@ export async function runEngine(o: EngineOpts): Promise<Record<ArmName, ArmResul
             const st = sourceStats(a.resolved);
             const hitRates = Object.fromEntries(Object.entries(st).map(([s, x]) => [s, { rate: x.hitRate, trials: x.trials }]));
             const style = o.lessonStyle ?? "v1";
-            const lessons = a.name === "llm_lessons" ? (style === "v2" ? lessonsV2(learner?.resolved ?? []) : (learner?.lessons ?? [])) : [];
+            const lessons = a.name === "llm_lessons" ? (style !== "v1" ? lessonsV2(learner?.resolved ?? []) : (learner?.lessons ?? [])) : [];
             const d = await o.llm(a.name, { signals, prices, hitRates, lessons, lessonStyle: style });
             if (d === null || d.decisions === null) { skippedLlm++; log(`${a.name} skipped cycle ${k + 1}`); armDetail.set(a, { skipped: true, lessons: d?.lessons ?? lessons, raw: (d?.raw ?? "").slice(0, 600) }); }
             else { decisions = d.decisions; armDetail.set(a, { lessons: d.lessons ?? lessons, raw: (d.raw ?? "").slice(0, 600), trades: d.decisions }); }

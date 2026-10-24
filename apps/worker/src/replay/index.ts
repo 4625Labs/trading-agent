@@ -40,6 +40,7 @@ export function validateDecisions(raw: unknown): Decision[] {
 const LLM_SYSTEM = `You are the decision desk of a cautious crypto trading agent in a historical replay. You see ONLY structured signals. Respond with ONLY a JSON object, no prose:
 {"trades":[{"asset":"BTC|ETH|SOL","direction":"long|short","size":<USD 10-200>,"confidence":<0..1>}]}
 At most one trade per asset, at most 3 trades. An empty list is fine. Each trade exits at -2% stop, +4% target, or after 12 cycles. Use each source's running hit rate (if shown) to decide whom to trust.`;
+const V3_EXTRA = ` Do not increase size or trade count because of these observations.`;
 const V2_NOTE = `\n\nNote on lessons: they are weak, noisy evidence from small samples. They do not change the exit rules or your position sizing. Keep trading only when several signals agree, and prefer no trade when unsure.`;
 
 export function llmDecider(llm: LlmFn, timeoutMs = 60_000, log?: (s: string) => void): LlmDecider {
@@ -49,10 +50,10 @@ export function llmDecider(llm: LlmFn, timeoutMs = 60_000, log?: (s: string) => 
       signals: ctx.signals.filter((s) => s.asset === a).map((s) => ({ source: s.source, direction: s.direction, confidence: +s.confidence.toFixed(2), running_hit_rate: ctx.hitRates[s.source] ? { rate: +ctx.hitRates[s.source].rate.toFixed(2), trials: ctx.hitRates[s.source].trials } : null })),
     }));
     let prompt = `Signals this cycle:\n${JSON.stringify(byAsset)}`;
-    if (arm === "llm_lessons") prompt += `\n\n${ctx.lessonStyle === "v2" ? "Observations so far" : "Lessons learned so far"}:\n${ctx.lessons.length ? ctx.lessons.map((l) => "- " + l).join("\n") : "(none yet)"}${ctx.lessonStyle === "v2" ? V2_NOTE : ""}`;
+    if (arm === "llm_lessons") prompt += `\n\n${ctx.lessonStyle === "v2" || ctx.lessonStyle === "v3" ? "Observations so far" : "Lessons learned so far"}:\n${ctx.lessons.length ? ctx.lessons.map((l) => "- " + l).join("\n") : "(none yet)"}${ctx.lessonStyle === "v2" ? V2_NOTE : ctx.lessonStyle === "v3" ? V2_NOTE + V3_EXTRA : ""}`;
     try {
       const text = await Promise.race([
-        llm({ model: MODEL_THESIS, system: LLM_SYSTEM, prompt, maxTokens: ctx.lessonStyle === "v2" ? 800 : 400 }),
+        llm({ model: MODEL_THESIS, system: LLM_SYSTEM, prompt, maxTokens: ctx.lessonStyle === "v2" || ctx.lessonStyle === "v3" ? 800 : 400 }),
         new Promise<never>((_, rej) => setTimeout(() => rej(new Error("llm timeout")), timeoutMs)),
       ]);
       return { decisions: validateDecisions(parseJsonLoose(text)), raw: text, lessons: ctx.lessons };
@@ -73,7 +74,7 @@ export interface Replay100Deps {
   runId?: string;
   klines?: Record<string, Candle[]>;
   llmFrom?: number; // LLM arms start at this 1-based cycle (diagnostics)
-  lessonStyle?: LessonStyle; // 'v1' (default, original) | 'v2' (evidence-gated descriptive lessons)
+  lessonStyle?: LessonStyle; // 'v1' (default, original) | 'v2' (evidence-gated descriptive) | 'v3' (v2 + explicit no size/trade-count increase)
 }
 
 function armSummary(r: ArmResult) {
