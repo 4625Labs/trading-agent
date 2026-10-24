@@ -8,6 +8,9 @@ instruction: |
     If the user approves, call place_order again once with the same fields plus thesis_id.
     If the user rejects, stop and briefly say so. Never retry after a rejection.
   - If place_order returns BLOCKED, do not retry; explain which rule blocked it.
+  - If a message tells you a trade closed and asks for feedback, call ask_question once with the prompt exactly as given
+    ("Feedback on thesis <thesis_id>? <one line outcome>") and options "Good call", "Bad call" and "Too risky".
+    After the answer, reply "Noted." Do not place any order in response to feedback.
   - Keep replies short.
 model:
   provider_config: omnara-openrouter
@@ -28,5 +31,6 @@ tools:
         target: { type: number }
         confidence: { type: number, description: "0 to 1" }
         rationale: { type: string }
+        signal_ids: { type: array, items: { type: string }, description: "ids of the signals behind this idea; pass through unchanged if given" }
         thesis_id: { type: string, description: "only when retrying after approval" }
       required: [asset, direction, size, entry, stop, target, confidence, rationale]

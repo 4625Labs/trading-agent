@@ -1,0 +1,16 @@
+[Unit]
+Description=Trading agent dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/app
+EnvironmentFile=/root/app/.env
+Environment=PORT={{DASH_PORT}}
+Environment=HOSTNAME=0.0.0.0
+ExecStart={{DASH_EXEC}}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

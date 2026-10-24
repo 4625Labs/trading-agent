@@ -5,3 +5,5 @@ node_modules
 .next
 dist
 .DS_Store
+.freestyle-deploy.json
+.agent-id

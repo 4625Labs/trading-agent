@@ -1,0 +1,15 @@
+[Unit]
+Description=Trading agent worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/app
+EnvironmentFile=/root/app/.env
+Environment=HEALTH_PORT={{WORKER_PORT}}
+ExecStart={{WORKER_EXEC}}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

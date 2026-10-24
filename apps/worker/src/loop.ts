@@ -2,6 +2,7 @@ import type { ExchangeAdapter, Thesis, TradeResult } from "@trading-agent/shared
 import type { Db } from "./db.ts";
 import type { Interaction, Omnara, ToolCall } from "./omnara.ts";
 import { evaluate } from "./guardrails.ts";
+import { heartbeat } from "./health.ts";
 
 export interface Venues {
   synthetic: ExchangeAdapter;
@@ -18,6 +19,7 @@ export interface PlaceOrderResult {
   data?: unknown;
 }
 
+const UUID_ONLY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UUID = /thesis\s+([0-9a-f]{8}-[0-9a-f-]{27})/i;
 
 export function argsOf(c: ToolCall): Record<string, any> {
@@ -62,7 +64,7 @@ export class Worker {
 
     let thesis: (Thesis & { status: string }) | null = a.thesis_id ? await this.db.getThesis(String(a.thesis_id)) : null;
     if (!thesis) {
-      const draft = { asset: String(a.asset).toUpperCase(), direction: a.direction, entry: +a.entry, size: +a.size, stop: +a.stop, target: +a.target, rationale: String(a.rationale ?? ""), confidence: +a.confidence, signalIds: [] };
+      const draft = { asset: String(a.asset).toUpperCase(), direction: a.direction, entry: +a.entry, size: +a.size, stop: +a.stop, target: +a.target, rationale: String(a.rationale ?? ""), confidence: +a.confidence, signalIds: (Array.isArray(a.signal_ids) ? a.signal_ids : []).map(String).filter((x: string) => UUID_ONLY.test(x)) };
       const id = await this.db.insertThesis(draft, "proposed");
       thesis = { ...draft, id, status: "proposed" };
     }
@@ -159,7 +161,7 @@ export class Worker {
 
   async run(intervalMs = 2000, stop: () => boolean = () => false) {
     while (!stop()) {
-      try { await this.tick(); } catch (e) { this.log(`tick error: ${(e as Error).message}`); }
+      try { await this.tick(); heartbeat.tick(); } catch (e) { this.log(`tick error: ${(e as Error).message}`); }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
   }
