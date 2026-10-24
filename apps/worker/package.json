@@ -1,1 +1,1 @@
-{"name":"@trading-agent/worker","version":"0.0.0","private":true,"type":"module","scripts":{"dev":"node --watch --experimental-strip-types src/index.ts"},"dependencies":{"@trading-agent/shared":"*","freestyle":"^0.2.20"}}
+{"name":"@trading-agent/worker","version":"0.0.0","private":true,"type":"module","scripts":{"dev":"node --watch --experimental-strip-types src/index.ts"},"dependencies":{"@trading-agent/shared":"*","freestyle":"^0.2.20","pg":"^8.23.1"}}
