@@ -36,3 +36,33 @@ export interface TradeResult {
   fee: number;
   ts: string;
 }
+
+export interface Preferences {
+  allowedAssets: string[];
+  bannedAssets: string[];
+  maxPositionPct: number; // of wallet balance, 0..1
+  approvalThresholdUsd: number; // orders above this need a human
+  minConfidence: number; // below this needs a human
+}
+
+export interface GuardrailConfig {
+  maxNotionalUsd: number;
+  maxExposureUsd: number;
+  dailyLossLimitUsd: number;
+  maxOrdersPerHour: number;
+}
+
+export interface GuardrailState {
+  walletUsd: number;
+  openExposureUsd: number;
+  dailyPnlUsd: number;
+  ordersLastHour: number;
+  killSwitch: boolean;
+}
+
+/** Venue abstraction: testnet exchange or the synthetic simulator behind one interface. */
+export interface ExchangeAdapter {
+  readonly venue: TradeResult["venue"];
+  price(asset: string): Promise<number>;
+  placeOrder(thesis: Thesis): Promise<TradeResult>;
+}
