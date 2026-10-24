@@ -3,11 +3,12 @@ import { createHmac } from "node:crypto";
 const e = process.env;
 const missing = (...k) => k.filter((x) => !e[x]);
 const results = [];
+const redact = (t) => Object.values(e).filter((v) => v && v.length > 6).reduce((a, v) => a.split(v).join("<redacted>"), String(t));
 async function spike(name, needs, fn) {
   const m = missing(...needs);
   if (m.length) return results.push([name, "SKIP", `missing: ${m.join(",")}`]);
   try { results.push([name, "OK", await fn()]); }
-  catch (err) { results.push([name, "FAIL", String(err.message ?? err).slice(0, 200)]); }
+  catch (err) { results.push([name, "FAIL", redact(err.message ?? err).slice(0, 200)]); }
 }
 const get = async (url, headers) => { const r = await fetch(url, { headers }); return r; };
 
