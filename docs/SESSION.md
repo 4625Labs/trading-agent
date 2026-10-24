@@ -142,7 +142,13 @@ Think of it as a careful junior analyst who:
 
 **What we changed (live agent, deployed):** a source is credited only when its signal agreed with the trade; duplicate lessons are merged; a lesson needs at least 8 trades; the idea-writing prompt now shows what the agent has noticed as **weak evidence with counts** ("observed 20 wins in 23 resolved BTC short trades; not statistically significant"), at most 3, never as commands, with an explicit "do not use this to increase size or trade count". Your own feedback ("Too risky" etc.) is still treated as a preference to respect.
 
-**What we have NOT shown:** that the fix works. A rewritten version tested on one 10-round window cut the loss from -7.45 to -1.58 USD but still over-traded. A proper test needs full 100-round runs on several random seeds, judged on drawdown and number of trades as well as profit, about 198 Claude calls per run. Not yet run.
+**What we have NOT shown:** that the fix works. We tested the rewritten wording (descriptive, evidence-ranked, with an explicit "do not size up") on two 10-round windows, with and without lessons, using the same random seed:
+| Window | Claude with lessons | Claude without lessons |
+|---|---|---|
+| rounds 61-70 | -1.14 USD, 13 trades, avg size 41.5 | +0.78 USD, 9 trades, avg size 31.1 |
+| rounds 30-39 | -1.60 USD, 12 trades, all short, avg size 47.5 | -1.52 USD, 13 trades, avg size 36.9 |
+
+The formatting failures went away, but even with the "do not size up" line, Claude sized larger with lessons in both windows, and in one window went short on every trade. The profit gaps (about 2 USD or less) are noise. **Our reading: even gently worded, cumulative lessons nudge Claude toward bigger, more one-sided bets, and they lag the market.** A full 100-round, multi-seed test (about 198 Claude calls per run) would be the fair check; we have not run it and would only do so as an honest test, not as a demo piece.
 
 **Live version:** each closed trade plus your feedback adds a lesson and nudges source trust; the Learning page shows it.
 
