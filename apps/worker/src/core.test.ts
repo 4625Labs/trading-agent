@@ -42,3 +42,15 @@ test("simulator short closes on stop with loss", async () => {
   assert.equal(closed[0].exitReason, "stop");
   assert.ok(closed[0].pnl! < 0);
 });
+
+import { BinanceTestnetAdapter, sign } from "./binance.ts";
+test("binance signing matches the documented HMAC example", () => {
+  // Example from Binance docs: secret NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j
+  const q = "symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
+  assert.equal(sign(q, "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j"), "c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71");
+});
+test("binance adapter rejects shorts and maps symbols", async () => {
+  const a = new BinanceTestnetAdapter({ apiKey: "k", apiSecret: "s" });
+  assert.equal(a.symbol("btc"), "BTCUSDT");
+  await assert.rejects(() => a.placeOrder({ ...thesis, direction: "short" }), /short/);
+});
