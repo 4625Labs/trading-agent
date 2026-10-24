@@ -66,5 +66,27 @@ test("llm arms: both run with a fake llm, lessons only in lessons arm, failures 
 test("llmDecider times out", async () => {
   const d = llmDecider(() => new Promise(() => {}), 20);
   const ctx = { signals: [], prices: { BTC: 1, ETH: 1, SOL: 1 }, hitRates: {}, lessons: [] };
-  assert.equal(await d("llm_nolessons", ctx), null);
+  assert.equal((await d("llm_nolessons", ctx)) ?? null, null);
+});
+
+import { lessonsV2 } from "../../src/replay/index.ts";
+const T = (asset: string, dir: "long" | "short", pnl: number, srcDir: "long" | "short" = dir) => ({ thesisId: "x", asset, direction: dir, confidence: 0.6, pnl, signals: [{ sourceId: "momentum", direction: srcDir, confidence: 0.6 }] });
+test("lessonsV2: n>=8 gate, descriptive, top 3, disagreeing sources get no credit", () => {
+  assert.deepEqual(lessonsV2(Array.from({ length: 7 }, () => T("BTC", "long", -1))), []);
+  const trades = [...Array.from({ length: 10 }, () => T("BTC", "short", 1)), ...Array.from({ length: 9 }, (_, i) => T("ETH", "long", i < 4 ? 1 : -1)), ...Array.from({ length: 8 }, () => T("SOL", "long", 1, "short"))];
+  const L = lessonsV2(trades);
+  assert.ok(L.length <= 3 && L.length >= 1);
+  assert.match(L[0], /^Observed 10 wins in 10 resolved BTC short trades/);
+  assert.ok(!L.some((l) => /reduce|avoid|skip|should|must/i.test(l)));
+  assert.ok(!L.some((l) => /8 resolved trades where the momentum/.test(l))); // SOL trades: source disagreed => not credited
+});
+test("v1 prompt unchanged, v2 prompt carries the weak-evidence note", async () => {
+  const seen: string[] = [];
+  const llm = async (r: { prompt: string }) => { seen.push(r.prompt); return '{"trades":[]}'; };
+  const ctx = { signals: [], prices: { BTC: 1, ETH: 1, SOL: 1 }, hitRates: {}, lessons: ["x"] };
+  const d = llmDecider(llm as any);
+  await d("llm_lessons", { ...ctx, lessonStyle: "v1" });
+  await d("llm_lessons", { ...ctx, lessonStyle: "v2" });
+  assert.match(seen[0], /Lessons learned so far:\n- x$/);
+  assert.match(seen[1], /Observations so far:\n- x\n\nNote on lessons: they are weak/);
 });

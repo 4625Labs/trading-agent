@@ -3,11 +3,12 @@ import { parseKlines, type Candle } from "../learning/replay.ts";
 import { sourceStats } from "../learning/stats.ts";
 import { MODEL_THESIS, parseJsonLoose, type LlmFn } from "../ingest/llm.ts";
 import type { Queryable } from "../learning/types.ts";
-import { ASSETS, maxDrawdown, runEngine, type ArmName, type ArmResult, type CycleRow, type Decision, type LlmDecider } from "./engine.ts";
+import { ASSETS, maxDrawdown, runEngine, type ArmName, type ArmResult, type CycleRow, type Decision, type LlmDecider, type LessonStyle } from "./engine.ts";
 import { PLANTED, clamp } from "./sources.ts";
 
 export * from "./sources.ts";
-export { runEngine, maxDrawdown, WARMUP } from "./engine.ts";
+export { runEngine, maxDrawdown, WARMUP, lessonsV2 } from "./engine.ts";
+export type { LessonStyle } from "./engine.ts";
 export type { LlmFn };
 
 export const DISCLAIMER = "Replay on historical prices, not live trading; planted sources are synthetic; past performance does not predict future results.";
@@ -39,6 +40,7 @@ export function validateDecisions(raw: unknown): Decision[] {
 const LLM_SYSTEM = `You are the decision desk of a cautious crypto trading agent in a historical replay. You see ONLY structured signals. Respond with ONLY a JSON object, no prose:
 {"trades":[{"asset":"BTC|ETH|SOL","direction":"long|short","size":<USD 10-200>,"confidence":<0..1>}]}
 At most one trade per asset, at most 3 trades. An empty list is fine. Each trade exits at -2% stop, +4% target, or after 12 cycles. Use each source's running hit rate (if shown) to decide whom to trust.`;
+const V2_NOTE = `\n\nNote on lessons: they are weak, noisy evidence from small samples. They do not change the exit rules or your position sizing. Keep trading only when several signals agree, and prefer no trade when unsure.`;
 
 export function llmDecider(llm: LlmFn, timeoutMs = 60_000, log?: (s: string) => void): LlmDecider {
   return async (arm, ctx) => {
@@ -47,13 +49,13 @@ export function llmDecider(llm: LlmFn, timeoutMs = 60_000, log?: (s: string) => 
       signals: ctx.signals.filter((s) => s.asset === a).map((s) => ({ source: s.source, direction: s.direction, confidence: +s.confidence.toFixed(2), running_hit_rate: ctx.hitRates[s.source] ? { rate: +ctx.hitRates[s.source].rate.toFixed(2), trials: ctx.hitRates[s.source].trials } : null })),
     }));
     let prompt = `Signals this cycle:\n${JSON.stringify(byAsset)}`;
-    if (arm === "llm_lessons") prompt += `\n\nLessons learned so far:\n${ctx.lessons.length ? ctx.lessons.map((l) => "- " + l).join("\n") : "(none yet)"}`;
+    if (arm === "llm_lessons") prompt += `\n\n${ctx.lessonStyle === "v2" ? "Observations so far" : "Lessons learned so far"}:\n${ctx.lessons.length ? ctx.lessons.map((l) => "- " + l).join("\n") : "(none yet)"}${ctx.lessonStyle === "v2" ? V2_NOTE : ""}`;
     try {
       const text = await Promise.race([
-        llm({ model: MODEL_THESIS, system: LLM_SYSTEM, prompt, maxTokens: 400 }),
+        llm({ model: MODEL_THESIS, system: LLM_SYSTEM, prompt, maxTokens: ctx.lessonStyle === "v2" ? 800 : 400 }),
         new Promise<never>((_, rej) => setTimeout(() => rej(new Error("llm timeout")), timeoutMs)),
       ]);
-      return validateDecisions(parseJsonLoose(text));
+      return { decisions: validateDecisions(parseJsonLoose(text)), raw: text, lessons: ctx.lessons };
     } catch (e) {
       log?.(`${arm} llm call failed: ${(e as Error).message}`);
       return null;
@@ -70,6 +72,8 @@ export interface Replay100Deps {
   onProgress?: (n: number) => void;
   runId?: string;
   klines?: Record<string, Candle[]>;
+  llmFrom?: number; // LLM arms start at this 1-based cycle (diagnostics)
+  lessonStyle?: LessonStyle; // 'v1' (default, original) | 'v2' (evidence-gated descriptive lessons)
 }
 
 function armSummary(r: ArmResult) {
@@ -112,14 +116,14 @@ export async function runReplay100(deps: Replay100Deps) {
   const pool = deps.pool;
   const arms: ArmName[] = deps.llm ? ["learner", "baseline", "llm_lessons", "llm_nolessons"] : ["learner", "baseline"];
   let runId = deps.runId ?? "";
-  const params = { seed, cycles, llm: !!deps.llm, candles: "4h", stopPct: 0.02, targetPct: 0.04, maxHold: 12, sources: [...Object.keys(PLANTED), "momentum", "meanrev", "breakout", "volregime"] };
+  const params = { seed, cycles, llm: !!deps.llm, lessonStyle: deps.lessonStyle ?? "v1", llmFrom: deps.llmFrom ?? 1, candles: "4h", stopPct: 0.02, targetPct: 0.04, maxHold: 12, sources: [...Object.keys(PLANTED), "momentum", "meanrev", "breakout", "volregime"] };
   if (pool) {
     if (runId) await pool.query("insert into replay_runs(id,params) values ($1,$2)", [runId, params]);
     else runId = (await pool.query("insert into replay_runs(params) values ($1) returning id", [params])).rows[0].id;
   }
   try {
     const main = await runEngine({
-      cycles, seed, klines, sources: "all", arms, llm: deps.llm ? llmDecider(deps.llm, 60_000, log) : null, log,
+      cycles, seed, klines, sources: "all", arms, lessonStyle: deps.lessonStyle, llmFrom: deps.llmFrom, llm: deps.llm ? llmDecider(deps.llm, 60_000, log) : null, log,
       onCycle: async (rows: CycleRow[], n) => {
         if (pool) {
           for (const r of rows) {

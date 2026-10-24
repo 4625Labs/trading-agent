@@ -14,8 +14,29 @@ export const ASSETS = ["BTC", "ETH", "SOL"];
 
 export type ArmName = "learner" | "baseline" | "llm_lessons" | "llm_nolessons";
 export interface Decision { asset: string; direction: Dir; size: number; confidence: number }
+export type LessonStyle = "v1" | "v2";
+export interface LlmResult { decisions: Decision[] | null; raw?: string; lessons?: string[] }
 export interface LlmDecider {
-  (arm: "llm_lessons" | "llm_nolessons", ctx: { signals: SrcSignal[]; prices: Record<string, number>; hitRates: Record<string, { rate: number; trials: number }>; lessons: string[] }): Promise<Decision[] | null>;
+  (arm: "llm_lessons" | "llm_nolessons", ctx: { signals: SrcSignal[]; prices: Record<string, number>; hitRates: Record<string, { rate: number; trials: number }>; lessons: string[]; lessonStyle?: LessonStyle }): Promise<LlmResult | null>;
+}
+
+/** v2: descriptive, evidence-ranked lessons; only groups with n>=8 resolved trades, top 3 by |z| of win rate vs 50%. */
+export function lessonsV2(trades: ClosedTrade[], minN = 8, top = 3): string[] {
+  const g = new Map<string, { label: string; n: number; wins: number }>();
+  const add = (key: string, label: string, win: boolean) => { const x = g.get(key) ?? { label, n: 0, wins: 0 }; x.n++; if (win) x.wins++; g.set(key, x); };
+  for (const t of trades) {
+    if (t.pnl === 0) continue;
+    const win = t.pnl > 0;
+    add(`a:${t.asset}:${t.direction}`, `${t.asset} ${t.direction} trades`, win);
+    // credit a source only when its own signal agreed with the trade direction
+    for (const src of new Set(t.signals.filter((x) => x.direction === t.direction).map((x) => x.sourceId))) add(`s:${src}`, `trades where the ${src} source agreed with the trade direction`, win);
+  }
+  return [...g]
+    .filter(([, x]) => x.n >= minN)
+    .map(([k, x]) => ({ k, x, z: Math.abs(x.wins - x.n / 2) / Math.sqrt(x.n / 4) }))
+    .sort((a, b) => b.z - a.z || a.k.localeCompare(b.k))
+    .slice(0, top)
+    .map(({ x, z }) => `Observed ${x.wins} wins in ${x.n} resolved ${x.label}; ${z < 2 ? "not statistically significant, may be chance" : "suggestive but still a small sample"}.`);
 }
 export interface CycleRow {
   n: number; arm: ArmName; simTs: string; trades: number; pnl: number; cumPnl: number; hitRate20: number | null; brier: number | null;
@@ -26,7 +47,7 @@ export interface ArmResult {
 }
 export interface EngineOpts {
   cycles: number; seed: number; klines: Record<string, Candle[]>; sources: "all" | "technical";
-  arms: ArmName[]; llm?: LlmDecider | null; onCycle?: (rows: CycleRow[], n: number) => Promise<void> | void; log?: (s: string) => void;
+  arms: ArmName[]; llm?: LlmDecider | null; lessonStyle?: LessonStyle; llmFrom?: number; onCycle?: (rows: CycleRow[], n: number) => Promise<void> | void; log?: (s: string) => void;
 }
 
 interface Open { pos: SimPosition; idx: number; signals: SignalRef[]; confidence: number; stop: number; target: number }
@@ -69,11 +90,11 @@ export async function runEngine(o: EngineOpts): Promise<Record<ArmName, ArmResul
     const i = WARMUP + k;
     const last = k === o.cycles - 1;
     const prices: Record<string, number> = Object.fromEntries(ASSETS.map((a) => [a, o.klines[a][i].c]));
-    const resolvedNow = new Map<Arm, { pnl: number; wins: number; n: number }>();
+    const resolvedNow = new Map<Arm, { pnl: number; wins: number; n: number; closed: { asset: string; dir: string; size: number; pnl: number; why: string | undefined; heldFrom: number }[] }>();
 
     // 1. resolve open positions against candle i (adverse extreme first)
     for (const a of arms) {
-      const acc = { pnl: 0, wins: 0, n: 0 };
+      const acc = { pnl: 0, wins: 0, n: 0, closed: [] as { asset: string; dir: string; size: number; pnl: number; why: string | undefined; heldFrom: number }[] };
       for (const op of [...a.open]) {
         const cd = o.klines[op.pos.thesis.asset][i];
         const long = op.pos.thesis.direction === "long";
@@ -86,6 +107,7 @@ export async function runEngine(o: EngineOpts): Promise<Record<ArmName, ArmResul
         a.open.splice(a.open.indexOf(op), 1);
         const pnl = op.pos.pnl!;
         acc.pnl += pnl; acc.n++; if (pnl > 0) acc.wins++;
+        acc.closed.push({ asset: op.pos.thesis.asset, dir: op.pos.thesis.direction, size: op.pos.thesis.size, pnl: +pnl.toFixed(3), why: op.pos.exitReason, heldFrom: op.idx - WARMUP + 1 });
         a.resolved.push({ thesisId: op.pos.thesis.id, asset: op.pos.thesis.asset, direction: op.pos.thesis.direction, confidence: op.confidence, pnl, signals: op.signals });
       }
       resolvedNow.set(a, acc);
@@ -107,6 +129,7 @@ export async function runEngine(o: EngineOpts): Promise<Record<ArmName, ArmResul
     }
 
     // 4. decisions
+    const armDetail = new Map<Arm, Record<string, unknown>>();
     if (!last) {
       for (const a of arms) {
         let decisions: Decision[] = [];
@@ -119,14 +142,17 @@ export async function runEngine(o: EngineOpts): Promise<Record<ArmName, ArmResul
             const agree = sg.filter((s) => s.direction === dir);
             decisions.push({ asset, direction: dir, size: TRADE_USD, confidence: agree.reduce((s, x) => s + x.confidence, 0) / agree.length });
           }
-        } else if (o.llm) {
+        } else if (o.llm && k + 1 >= (o.llmFrom ?? 1)) {
           if (llmCalls >= 260) { skippedLlm++; log(`llm budget exhausted; ${a.name} skips cycle ${k + 1}`); }
           else {
             llmCalls++;
             const st = sourceStats(a.resolved);
             const hitRates = Object.fromEntries(Object.entries(st).map(([s, x]) => [s, { rate: x.hitRate, trials: x.trials }]));
-            const d = await o.llm(a.name, { signals, prices, hitRates, lessons: a.name === "llm_lessons" ? (learner?.lessons ?? []) : [] });
-            if (d === null) { skippedLlm++; log(`${a.name} skipped cycle ${k + 1}`); } else decisions = d;
+            const style = o.lessonStyle ?? "v1";
+            const lessons = a.name === "llm_lessons" ? (style === "v2" ? lessonsV2(learner?.resolved ?? []) : (learner?.lessons ?? [])) : [];
+            const d = await o.llm(a.name, { signals, prices, hitRates, lessons, lessonStyle: style });
+            if (d === null || d.decisions === null) { skippedLlm++; log(`${a.name} skipped cycle ${k + 1}`); armDetail.set(a, { skipped: true, lessons: d?.lessons ?? lessons, raw: (d?.raw ?? "").slice(0, 600) }); }
+            else { decisions = d.decisions; armDetail.set(a, { lessons: d.lessons ?? lessons, raw: (d.raw ?? "").slice(0, 600), trades: d.decisions }); }
           }
         }
         for (const d of decisions) {
@@ -154,7 +180,7 @@ export async function runEngine(o: EngineOpts): Promise<Record<ArmName, ArmResul
         hitRate20: n20 ? w20 / n20 : null,
         brier: a.resolved.length ? brier(a.resolved.map((t) => ({ confidence: t.confidence, outcome: (t.pnl > 0 ? 1 : 0) as 0 | 1 }))) : null,
         weights: a.name === "learner" ? { ...a.w } : {}, lessons: a.name === "learner" ? a.lessons.length : a.name === "llm_lessons" ? (learner?.lessons.length ?? 0) : 0,
-        detail: { resolved: acc.n, open: a.open.length, llmCalls },
+        detail: { resolved: acc.n, closed: acc.closed, open: a.open.length, llmCalls, ...(armDetail.get(a) ?? {}), ...(a.name === "learner" ? { lessonTexts: a.lessons, lessonsV2: lessonsV2(a.resolved) } : {}) },
       });
     }
     await o.onCycle?.(rows, k + 1);
