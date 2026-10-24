@@ -2,7 +2,7 @@ import type { Db } from "./db.ts";
 
 export type TraceKind =
   | "ingest" | "signal" | "thesis_proposed" | "guardrail" | "approval_requested" | "approval_decided"
-  | "order_executed" | "position_closed" | "feedback" | "learning" | "error";
+  | "order_executed" | "position_closed" | "feedback" | "learning" | "demo" | "error";
 
 /** Records a step of the agent's reasoning for the dashboard. Never throws: tracing must not break trading. */
 export async function emit(db: Db, kind: TraceKind, title: string, detail: Record<string, unknown> = {}, thesisId?: string | null, agentId?: string) {

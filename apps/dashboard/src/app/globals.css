@@ -66,3 +66,6 @@ input[type=text],input[type=number],input[type=password]{font:inherit;background
 .stepbody{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
 .stepbody ul{margin:6px 0;padding-left:18px}.stepbody h2{margin-bottom:6px}.stepbody .item{padding:8px 0}
 .tracelink{font-size:.8rem;display:inline-block;margin-top:8px}
+a.btn{display:inline-block;text-decoration:none;text-align:center}
+.big{padding:16px 22px;font-size:1rem;min-height:52px;margin-top:6px}
+.stepbody .btns .big{flex:1 1 200px}

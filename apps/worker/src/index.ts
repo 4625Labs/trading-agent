@@ -18,6 +18,7 @@ import { generateTheses, pgThesisReaders, proposeToAgent } from "./thesis/index.
 import { anthropicLlm } from "./ingest/llm.ts";
 import { startHealthServer, heartbeat } from "./health.ts";
 import { emit } from "./trace.ts";
+import { pollCommands, overriddenPrice, priceOverrides } from "./commands.ts";
 
 const [cmd, arg] = process.argv.slice(2);
 const db = Db.fromEnv();
@@ -84,10 +85,13 @@ await snapshot().catch((e) => log(`wallet snapshot error: ${(e as Error).message
 every(60_000, "wallet", snapshot);
 
 // Close-out (stop/target), human feedback, learning.
-const watcher = new Watcher(db, getPrice, sim, real);
+const watchPrice = async (asset: string) => overriddenPrice(asset) ?? getPrice(asset);
+const watcher = new Watcher(db, watchPrice, sim, real);
 every(15_000, "watcher", async () => {
   for (const c of await watcher.tick()) {
-    await emit(db, "position_closed", `${c.asset} position closed at ${c.reason}: ${c.pnl >= 0 ? "+" : ""}$${c.pnl.toFixed(2)}`, { reason: c.reason, pnl: c.pnl }, c.thesisId);
+    const demo = priceOverrides.has(c.asset);
+    await emit(db, "position_closed", `${c.asset} position closed at ${c.reason}${demo ? " (demo price move)" : ""}: ${c.pnl >= 0 ? "+" : ""}$${c.pnl.toFixed(2)}`, { reason: c.reason, pnl: c.pnl, demo }, c.thesisId);
+    priceOverrides.delete(c.asset);
   }
 });
 const firstAgent = () => [...worker.agents][0];
@@ -99,6 +103,8 @@ every(20_000, "feedback", async () => {
   if (n) {
     const fresh = await db.pool.query("select id,feedback from theses where feedback is not null and id not in (select thesis_id from agent_events where kind='feedback' and thesis_id is not null)");
     for (const r of fresh.rows) await emit(db, "feedback", `You said: ${r.feedback}`, { answer: r.feedback }, r.id);
+    const l = await runLearningCycle({ pool: db.pool, log });
+    if (l.trades > 0) await emit(db, "learning", `Learning update from ${l.trades} closed trades: ${l.lessonsWritten} lessons`, { closedTrades: l.trades, lessons: l.lessonsWritten, brier: l.brier, weights: l.weights });
   }
 });
 every(5 * 60_000, "learning", async () => {
@@ -106,6 +112,10 @@ every(5 * 60_000, "learning", async () => {
   if (r.trades > 0) await emit(db, "learning", `Learning update from ${r.trades} closed trades: ${r.lessonsWritten} lessons`, { closedTrades: r.trades, lessons: r.lessonsWritten, brier: r.brier, weights: r.weights });
 });
 if (cmd === "serve") every(60_000, "agents", loadActiveAgents);
+
+// Demo/ops commands queued from the dashboard.
+const cmdDeps = { db, omnara, agent: firstAgent, llm: anthropicLlm(), price: getPrice, walletUsd: async () => (real ? real.freeBalance("USDT") : 10_000), log };
+every(4_000, "commands", () => pollCommands(cmdDeps));
 
 // News -> signals -> thesis -> agent (which calls place_order; guardrails and approvals still apply).
 if (autonomy) {
