@@ -1,0 +1,11 @@
+create table preferences (id uuid primary key default gen_random_uuid(), user_id text not null, data jsonb not null default '{}', updated_at timestamptz default now());
+create table sources (id uuid primary key default gen_random_uuid(), url text not null, weight real not null default 1.0);
+create table signals (id uuid primary key default gen_random_uuid(), asset text, direction text, magnitude real, horizon text, confidence real, source_id uuid references sources(id), url text, created_at timestamptz default now());
+create table theses (id uuid primary key default gen_random_uuid(), asset text, direction text, entry numeric, size numeric, stop numeric, target numeric, rationale text, confidence real, signal_ids uuid[], status text default 'open', created_at timestamptz default now());
+create table synthetic_trades (id uuid primary key default gen_random_uuid(), thesis_id uuid references theses(id), fill_price numeric, qty numeric, fee numeric, closed_at timestamptz, pnl numeric, created_at timestamptz default now());
+create table real_trades (id uuid primary key default gen_random_uuid(), thesis_id uuid references theses(id), venue text, order_id text, fill_price numeric, qty numeric, fee numeric, pnl numeric, created_at timestamptz default now());
+create table approvals (id uuid primary key default gen_random_uuid(), thesis_id uuid references theses(id), status text default 'pending', feedback text, created_at timestamptz default now(), decided_at timestamptz);
+create table lessons (id uuid primary key default gen_random_uuid(), text text not null, origin text, created_at timestamptz default now());
+create table runs (id uuid primary key default gen_random_uuid(), trigger text, status text, started_at timestamptz default now(), finished_at timestamptz);
+create table wallet_snapshots (id uuid primary key default gen_random_uuid(), balance numeric, created_at timestamptz default now());
+create table guardrail_events (id uuid primary key default gen_random_uuid(), thesis_id uuid references theses(id), verdict text, reasons text[], created_at timestamptz default now());
