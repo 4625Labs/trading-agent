@@ -25,7 +25,7 @@ const DASH_EXEC = process.env.DEPLOY_DASH_EXEC ?? `${BUN} --bun run --cwd apps/d
 export const ENV_KEYS = [
   "DATABASE_URL", "OMNARA_ADMIN_TOKEN", "EXCHANGE_TESTNET_API_KEY", "EXCHANGE_TESTNET_API_SECRET", "EXCHANGE_TESTNET_URL",
   "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  "ANTHROPIC_API_KEY", "CONTEXT_DEV_API_KEY", "HIL_SIM", "WORKER_ARGS", "APP_VERSION",
+  "ANTHROPIC_API_KEY", "CONTEXT_DEV_API_KEY", "DASHBOARD_PASSWORD", "HIL_SIM", "WORKER_ARGS", "APP_VERSION",
   ...(process.env.DEPLOY_ENV_KEYS ?? "").split(",").filter(Boolean),
 ];
 const EXCLUDES = [".env", ".env.*", "node_modules", ".git", ".next", ".freestyle-deploy.json", ".agent-id", "dist", ".DS_Store"];

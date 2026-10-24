@@ -46,12 +46,20 @@ if (cmd === "launch") {
   const id = await omnara.launch(yaml, arg ?? "Await instructions.", "trading-agent");
   console.log(`launched agent ${id}`);
   await register(id);
+} else if (cmd === "create") {
+  // Launch + register an agent, then exit; the deployed worker picks it up in `serve` mode.
+  const yaml = readFileSync(new URL("../agent.yaml", import.meta.url), "utf8");
+  const id = await omnara.launch(yaml, arg ?? "Await instructions.", "trading-agent");
+  await register(id);
+  console.log(`created and registered agent ${id}`);
+  await db.close();
+  process.exit(0);
 } else if (cmd === "attach" && arg) {
   await register(arg);
 } else if (cmd === "serve") {
   await loadActiveAgents();
 } else {
-  console.log("usage: launch <message> | attach <agent_id> | serve");
+  console.log("usage: launch <message> | create | attach <agent_id> | serve");
   process.exit(1);
 }
 
