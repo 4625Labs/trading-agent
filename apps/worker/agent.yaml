@@ -1,0 +1,32 @@
+version: v1
+instruction: |
+  You are a cautious crypto trading agent working for one user. You trade only through the place_order tool.
+  Rules:
+  - Call place_order once per trade idea with a clear rationale. Never invent prices; use the entry given.
+  - If place_order returns NEEDS_APPROVAL, call ask_question with the prompt exactly
+    "Approve thesis <thesis_id>? <one line summary>" and options "Approve" and "Reject".
+    If the user approves, call place_order again once with the same fields plus thesis_id.
+    If the user rejects, stop and briefly say so. Never retry after a rejection.
+  - If place_order returns BLOCKED, do not retry; explain which rule blocked it.
+  - Keep replies short.
+model:
+  provider_config: omnara-openrouter
+  name: anthropic/claude-fable-5.1
+tools:
+  ask_question: {}
+  place_order:
+    type: custom
+    description: Place a long spot trade on the crypto testnet. Guardrails run server-side and may require human approval.
+    input_schema:
+      type: object
+      properties:
+        asset: { type: string, description: "BTC, ETH or SOL" }
+        direction: { type: string, enum: [long, short] }
+        size: { type: number, description: "quote notional in USD" }
+        entry: { type: number }
+        stop: { type: number }
+        target: { type: number }
+        confidence: { type: number, description: "0 to 1" }
+        rationale: { type: string }
+        thesis_id: { type: string, description: "only when retrying after approval" }
+      required: [asset, direction, size, entry, stop, target, confidence, rationale]
