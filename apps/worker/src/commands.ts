@@ -3,6 +3,8 @@ import type { Omnara } from "./omnara.ts";
 import type { LlmFn } from "./ingest/llm.ts";
 import { generateTheses, pgThesisReaders, proposeToAgent } from "./thesis/index.ts";
 import { emit } from "./trace.ts";
+import { applyFeedback } from "./feedback.ts";
+import { runLearningCycle } from "./learning/cycle.ts";
 
 /** Demo price overrides apply ONLY to the close-out watcher, never to fills, guardrails or real orders. */
 export const priceOverrides = new Map<string, { price: number; until: number }>();
@@ -69,6 +71,16 @@ export async function demoPriceMove(d: CommandDeps, outcome: "target" | "stop"):
   return `simulating ${t.asset} at ${price.toFixed(2)} (${outcome}); the watcher closes it within ~15s`;
 }
 
+/** Human feedback entered in the dashboard: applied directly, no agent round trip. */
+export async function feedbackCommand(d: CommandDeps, payload: { thesisId?: string; answer?: string }): Promise<string> {
+  const ok = await applyFeedback(d.db, String(payload?.thesisId ?? ""), String(payload?.answer ?? ""), d.log);
+  if (!ok) return "feedback not applied (thesis not closed, already has feedback, or invalid answer)";
+  await emit(d.db, "feedback", `You said: ${payload.answer}`, { answer: payload.answer, via: "dashboard" }, String(payload.thesisId));
+  const l = await runLearningCycle({ pool: d.db.pool, log: d.log });
+  if (l.trades > 0) await emit(d.db, "learning", `Learning update from ${l.trades} closed trades: ${l.lessonsWritten} lessons`, { closedTrades: l.trades, lessons: l.lessonsWritten, brier: l.brier, weights: l.weights });
+  return `recorded "${payload.answer}" and updated what the agent has learned`;
+}
+
 /** Claim and run pending commands from the dashboard. Each command is claimed atomically. */
 export async function pollCommands(d: CommandDeps) {
   const pending = await d.db.pool.query("select id,kind,payload from commands where status='pending' order by created_at limit 5");
@@ -80,6 +92,7 @@ export async function pollCommands(d: CommandDeps) {
     try {
       if (c.kind === "demo_idea") result = await demoIdea(d);
       else if (c.kind === "demo_price_move" && (c.payload?.outcome === "target" || c.payload?.outcome === "stop")) result = await demoPriceMove(d, c.payload.outcome);
+      else if (c.kind === "feedback") result = await feedbackCommand(d, c.payload);
       else {
         status = "failed";
         result = `unknown command ${c.kind}`;

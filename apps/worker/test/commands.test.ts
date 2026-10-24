@@ -57,3 +57,44 @@ test("unknown command kinds and bad payloads are rejected, not executed", async 
   assert.equal(priceOverrides.size, 0);
   assert.equal(calls.filter((c) => c.startsWith("update commands set")).length >= 4, true);
 });
+
+import { feedbackCommand } from "../src/commands.ts";
+import { applyFeedback } from "../src/feedback.ts";
+
+function feedbackDb(claimed: boolean) {
+  const q: string[] = [];
+  const pool = {
+    query: async (sql: string) => {
+      q.push(sql);
+      if (/update theses set feedback/.test(sql)) return claimed ? { rowCount: 1, rows: [{ asset: "BTC", direction: "short", exit_reason: "target", pnl: "3.5", size: "150" }] } : { rowCount: 0, rows: [] };
+      if (/from preferences/.test(sql)) return { rows: [{ data: { allowedAssets: ["BTC"], bannedAssets: [], maxPositionPct: 0.05, approvalThresholdUsd: 25, minConfidence: 0.5 } }] };
+      return { rows: [], rowCount: 1 };
+    },
+  };
+  return { db: { pool, prefs: async () => ({ approvalThresholdUsd: 25, maxPositionPct: 0.05 }), insertLesson: async (t: string) => void q.push("lesson:" + t) } as any, q };
+}
+
+test("applyFeedback rejects labels outside the whitelist without touching the DB", async () => {
+  const { db, q } = feedbackDb(true);
+  assert.equal(await applyFeedback(db, "t", "Great", () => {}), false);
+  assert.equal(q.length, 0);
+});
+
+test("applyFeedback records a lesson, and 'Too risky' tightens preferences", async () => {
+  const { db, q } = feedbackDb(true);
+  assert.equal(await applyFeedback(db, "t", "Too risky", () => {}), true);
+  assert.ok(q.some((x) => x.startsWith("lesson:")));
+  assert.ok(q.some((x) => /update preferences/.test(x)));
+});
+
+test("applyFeedback is a no-op when already answered or thesis not closed", async () => {
+  const { db, q } = feedbackDb(false);
+  assert.equal(await applyFeedback(db, "t", "Good call", () => {}), false);
+  assert.ok(!q.some((x) => x.startsWith("lesson:")));
+});
+
+test("feedback command with a bad answer reports not applied", async () => {
+  const { db } = feedbackDb(true);
+  const d = { db, omnara: { send: async () => ({}) } as any, agent: () => "a", llm: (async () => "") as any, price: async () => 1, walletUsd: async () => 1, log: () => {} };
+  assert.match(await feedbackCommand(d, { thesisId: "x", answer: "nope" }), /not applied/);
+});

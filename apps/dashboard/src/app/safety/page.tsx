@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Badge, Card, Empty, Err, Loading, Poll, ago, post, usePoll } from "@/components/ui";
+import { Badge, Card, Empty, Err, Loading, Poll, ago, post, usePoll, Title } from "@/components/ui";
 
 export default function Safety() {
   const { data: d, error, at, reload } = usePoll<any>("/api/safety");
@@ -16,7 +16,7 @@ export default function Safety() {
   }
   return (
     <>
-      <h1>Safety <Poll at={at} error={error} /></h1>
+      <Title icon="safety" at={at} error={error}>Safety</Title>
       <Err msg={err ?? (error && !d ? error : null)} />
       {!d ? <Loading /> : (
         <>

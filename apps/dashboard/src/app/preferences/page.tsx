@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Card, Err, Loading, post } from "@/components/ui";
+import { Card, Err, Loading, Title, post } from "@/components/ui";
 
 export default function Prefs() {
   const [f, setF] = useState<Record<string, string> | null>(null);
@@ -23,7 +23,7 @@ export default function Prefs() {
   }
   return (
     <>
-      <h1>Preferences</h1>
+      <Title icon="prefs">Preferences</Title>
       {!f ? (msg ? <Err msg={msg.t} /> : <Loading />) : (
         <Card>
           <form className="f" onSubmit={save}>

@@ -1,4 +1,5 @@
 "use client";
+import Icon from "./Icon";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 export function usePoll<T>(url: string, ms = 5000) {
@@ -33,19 +34,52 @@ export async function post(url: string, b: unknown): Promise<{ ok: boolean; erro
   } catch { return { ok: false, error: "network error" }; }
 }
 
-export const Card = ({ title, children, right }: { title?: string; children: ReactNode; right?: ReactNode }) => (
+export const Card = ({ title, children, right, icon }: { title?: string; children: ReactNode; right?: ReactNode; icon?: string }) => (
   <section className="card">
-    {(title || right) && <header><h2>{title}</h2>{right}</header>}
+    {(title || right) && <header><h2>{icon && <Icon name={icon} size={16} />}{title}</h2>{right}</header>}
     {children}
   </section>
 );
-export const Badge = ({ s }: { s: string }) => <span className={`badge b-${s.replace(/[^a-z]/gi, "_").toLowerCase()}`}>{s.replace(/_/g, " ")}</span>;
+export const Badge = ({ s }: { s: string }) => <span className={`badge b-${s.toLowerCase().replace(/^[^a-z]+/, "").replace(/[^a-z]+/g, "_")}`}>{s.replace(/_/g, " ")}</span>;
 export const Stat = ({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "pos" | "neg" | "warn" }) => (
   <div className="stat"><div className="lbl">{label}</div><div className={`val ${tone ?? ""}`}>{value}</div>{sub && <div className="sub">{sub}</div>}</div>
 );
 export const Err = ({ msg }: { msg: string | null }) => (msg ? <div className="err" role="alert">{msg}</div> : null);
-export const Loading = () => <div className="muted pad">Loading...</div>;
-export const Empty = ({ children }: { children: ReactNode }) => <div className="muted pad">{children}</div>;
+export const Loading = () => (
+  <div aria-busy="true" aria-label="Loading">
+    <div className="sk" style={{ height: 120, borderRadius: 22, marginBottom: 16 }} />
+    <div className="grid">{[0, 1, 2, 3].map((i) => <div key={i} className="sk" style={{ height: 84, borderRadius: 18 }} />)}</div>
+    <div className="sk" style={{ height: 200, borderRadius: 18 }} />
+  </div>
+);
+export const Empty = ({ children, icon = "inbox", title }: { children?: ReactNode; icon?: string; title?: string }) => (
+  <div className="empty"><div className="orb"><Icon name={icon} size={24} /></div>{title && <b>{title}</b>}<div>{children}</div></div>
+);
+export const Title = ({ icon, children, at, error }: { icon: string; children: ReactNode; at?: number | null; error?: string | null }) => (
+  <h1><span className="ttl"><span className="ic"><Icon name={icon} size={20} /></span>{children}</span>{at !== undefined && <Poll at={at} error={error ?? null} />}</h1>
+);
+
+/** Animated number: eases from the previous value to the new one. */
+export function Count({ value, format = (n: number) => String(Math.round(n)) }: { value: number | null | undefined; format?: (n: number) => string }) {
+  const [v, setV] = useState(0);
+  const prev = useRef(0);
+  useEffect(() => {
+    if (value === null || value === undefined) return;
+    const from = prev.current, to = value;
+    if (from === to || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { prev.current = to; setV(to); return; }
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (t: number) => {
+      const p = Math.min(1, (t - t0) / 800), e = 1 - Math.pow(1 - p, 3);
+      const cur = from + (to - from) * e; prev.current = cur; setV(cur);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  if (value === null || value === undefined) return <>-</>;
+  return <>{format(v)}</>;
+}
 
 export const usd = (n: number | null | undefined, d = 2) => (n === null || n === undefined || Number.isNaN(n) ? "-" : (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
 export const px = (n: number | null | undefined) => (n === null || n === undefined ? "-" : n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 4 : 2 }));

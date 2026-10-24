@@ -6,19 +6,19 @@ const price = (x: any) => { const v = n(x); return v === undefined || Number.isN
 const plural = (c: number, w: string) => `${c} ${w}${c === 1 ? "" : "s"}`;
 
 export const KIND: Record<string, { icon: string; label: string; tone: string }> = {
-  ingest: { icon: "📰", label: "News", tone: "info" },
-  signal: { icon: "📡", label: "Signal", tone: "info" },
-  thesis_proposed: { icon: "💡", label: "Idea", tone: "idea" },
-  guardrail: { icon: "🛡️", label: "Safety check", tone: "warn" },
-  approval_requested: { icon: "🙋", label: "Needs you", tone: "warn" },
-  approval_decided: { icon: "✅", label: "Decision", tone: "pos" },
-  order_executed: { icon: "💸", label: "Trade", tone: "pos" },
-  position_closed: { icon: "🏁", label: "Closed", tone: "idea" },
-  feedback: { icon: "💬", label: "Feedback", tone: "info" },
-  learning: { icon: "🧠", label: "Learning", tone: "idea" },
-  error: { icon: "⚠️", label: "Problem", tone: "neg" },
+  ingest: { icon: "news", label: "News", tone: "info" },
+  signal: { icon: "radio", label: "Signal", tone: "info" },
+  thesis_proposed: { icon: "bulb", label: "Idea", tone: "idea" },
+  guardrail: { icon: "safety", label: "Safety check", tone: "warn" },
+  approval_requested: { icon: "hand", label: "Needs you", tone: "warn" },
+  approval_decided: { icon: "approvals", label: "Decision", tone: "pos" },
+  order_executed: { icon: "coins", label: "Trade", tone: "pos" },
+  position_closed: { icon: "flag", label: "Closed", tone: "idea" },
+  feedback: { icon: "chat", label: "Feedback", tone: "info" },
+  learning: { icon: "learning", label: "Learning", tone: "idea" },
+  error: { icon: "alert", label: "Problem", tone: "neg" },
 };
-export const kindOf = (k: string) => KIND[k] ?? { icon: "•", label: k, tone: "info" };
+export const kindOf = (k: string) => KIND[k] ?? { icon: "info", label: k, tone: "info" };
 
 export function sentence(e: Ev): string {
   const d = e.detail ?? {};

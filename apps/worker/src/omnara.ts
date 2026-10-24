@@ -1,3 +1,5 @@
+import { recordUsage } from "./usage.ts";
+
 /** Minimal Omnara REST client for the worker. Token comes from env; never logged. */
 export interface Interaction {
   id: string;
@@ -28,6 +30,7 @@ export class Omnara {
   }
   async req(method: string, path: string, body?: unknown) {
     const res = await fetch(this.base + path, { method, headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    if (method !== "GET") recordUsage({ provider: "omnara", endpoint: `${method} ${path.replace(/\/orgs\/[^/]+(\/projects\/[^/]+)?/, "").replace(/(agt|int|tcl)_[a-z0-9]+/g, ":id")}`, status: res.status });
     const text = await res.text();
     let json: any = text;
     try { json = JSON.parse(text); } catch { /* keep text */ }

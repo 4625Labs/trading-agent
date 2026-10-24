@@ -18,6 +18,7 @@ import { generateTheses, pgThesisReaders, proposeToAgent } from "./thesis/index.
 import { anthropicLlm } from "./ingest/llm.ts";
 import { startHealthServer, heartbeat } from "./health.ts";
 import { emit } from "./trace.ts";
+import { setUsageSink } from "./usage.ts";
 import { pollCommands, overriddenPrice, priceOverrides } from "./commands.ts";
 
 const [cmd, arg] = process.argv.slice(2);
@@ -31,6 +32,12 @@ const getPrice = async (asset: string) => {
 };
 const sim = new Simulator(getPrice);
 const worker = new Worker(db, omnara, { synthetic: sim, real }, { simulateHuman: process.env.HIL_SIM === "1" });
+// Persist every integration call for the dashboard's usage tiles (fire-and-forget).
+setUsageSink((r) => {
+  void db.pool
+    .query("insert into api_usage(provider,endpoint,status,credits_used,credits_remaining,detail) values ($1,$2,$3,$4,$5,$6)", [r.provider, r.endpoint, r.status ?? null, r.creditsUsed ?? null, r.creditsRemaining ?? null, JSON.stringify(r.detail ?? {})])
+    .catch(() => {});
+});
 const log = (s: string) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${s}`);
 const every = (ms: number, label: string, fn: () => Promise<unknown>) =>
   setInterval(() => fn().catch((e) => log(`${label} error: ${(e as Error).message}`)), ms);
@@ -98,7 +105,8 @@ const firstAgent = () => [...worker.agents][0];
 every(20_000, "feedback", async () => {
   const a = firstAgent();
   if (!a) return;
-  await askPendingFeedback(db, omnara, a, { max: 1, log });
+  // Feedback is collected in the dashboard (the agent is single-threaded and can be blocked on an approval).
+  if (process.env.FEEDBACK_VIA_AGENT === "1") await askPendingFeedback(db, omnara, a, { max: 1, log });
   const n = await syncFeedback(db, omnara, a, { log });
   if (n) {
     const fresh = await db.pool.query("select id,feedback from theses where feedback is not null and id not in (select thesis_id from agent_events where kind='feedback' and thesis_id is not null)");

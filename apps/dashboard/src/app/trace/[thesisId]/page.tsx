@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { use } from "react";
 import { Details } from "@/components/EventCard";
-import { Badge, Card, Err, Loading, Poll, ago, host, pct, px, usd, usePoll } from "@/components/ui";
+import { Badge, Card, Title, Err, Loading, Poll, ago, host, pct, px, usd, usePoll } from "@/components/ui";
 import { sentence, type Ev } from "@/lib/trace";
 
 const Step = ({ n, title, children }: { n: number; title: string; children: React.ReactNode }) => (
@@ -22,7 +22,7 @@ export default function Why({ params }: { params: Promise<{ thesisId: string }> 
   const t = d?.thesis;
   return (
     <>
-      <h1>Why this trade? <Poll at={at} error={error} /></h1>
+      <Title icon="trace" at={at} error={error}>Why this trade?</Title>
       <p><Link href="/trace">All activity</Link></p>
       <Err msg={error} />
       {!d ? (error ? null : <Loading />) : (

@@ -1,3 +1,5 @@
+import { recordUsage } from "../usage.ts";
+
 /** Injectable LLM function: returns the model's raw text. Uses global fetch against the Anthropic Messages API (no SDK). */
 export interface LlmRequest {
   model: string;
@@ -21,9 +23,13 @@ export function anthropicLlm(apiKey = process.env.ANTHROPIC_API_KEY): LlmFn {
         body: JSON.stringify({ model, max_tokens: maxTokens ?? 2000, system, messages: [{ role: "user", content: prompt }] }),
       });
     } catch (e) {
+      recordUsage({ provider: "anthropic", endpoint: "/v1/messages", status: null, detail: { model } });
       throw new Error(`anthropic request failed: ${(e as Error).name}`);
     }
     const text = await res.text();
+    let usageTokens: Record<string, unknown> = {};
+    try { const u = JSON.parse(text).usage; if (u) usageTokens = { input_tokens: u.input_tokens, output_tokens: u.output_tokens }; } catch { /* non-JSON error body */ }
+    recordUsage({ provider: "anthropic", endpoint: "/v1/messages", status: res.status, detail: { model, ...usageTokens } });
     if (!res.ok) throw new Error(`anthropic ${res.status}: ${text.replace(apiKey, "<key>").slice(0, 200)}`);
     const j = JSON.parse(text);
     return (j.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");

@@ -46,6 +46,20 @@ export async function tightenPrefs(db: Db, userId = "default") {
   return next;
 }
 
+/** Record a human verdict on a closed thesis: feedback column, a lesson, and risk tightening for "Too risky". Idempotent per thesis. */
+export async function applyFeedback(db: Db, thesisId: string, label: string, log?: (s: string) => void): Promise<boolean> {
+  if (!(FEEDBACK_OPTIONS as readonly string[]).includes(label)) return false;
+  const claim = await db.pool.query("update theses set feedback=$2, feedback_at=now() where id=$1 and status='closed' and feedback is null returning asset,direction,exit_reason,pnl,size", [thesisId, label]);
+  if (!claim.rowCount) return false;
+  const t = claim.rows[0];
+  await db.insertLesson(`Human feedback "${label}" on ${outcomeLine(t)}.`, "human_feedback");
+  if (/too risky/i.test(label)) {
+    const p = await tightenPrefs(db);
+    log?.(`"Too risky": approvalThresholdUsd=${p.approvalThresholdUsd} maxPositionPct=${p.maxPositionPct}`);
+  }
+  return true;
+}
+
 /** Turn resolved feedback questions into lessons and preference changes. Idempotent per thesis. */
 export async function syncFeedback(db: Db, omnara: Omnara, agent: string, opts: { log?: (s: string) => void } = {}): Promise<number> {
   let n = 0;
@@ -57,14 +71,7 @@ export async function syncFeedback(db: Db, omnara: Omnara, agent: string, opts: 
     const idx = chosenIndex(it);
     const label = idx === undefined ? undefined : q?.options[idx]?.label;
     if (!label) continue;
-    const claim = await db.pool.query("update theses set feedback=$2, feedback_at=now() where id=$1 and feedback is null returning asset,direction,exit_reason,pnl,size", [m[1], label]);
-    if (!claim.rowCount) continue;
-    const t = claim.rows[0];
-    await db.insertLesson(`Human feedback "${label}" on ${outcomeLine(t)}.`, "human_feedback");
-    if (/too risky/i.test(label)) {
-      const p = await tightenPrefs(db);
-      opts.log?.(`"Too risky": approvalThresholdUsd=${p.approvalThresholdUsd} maxPositionPct=${p.maxPositionPct}`);
-    }
+    if (!(await applyFeedback(db, m[1], label, opts.log))) continue;
     opts.log?.(`feedback on ${m[1]}: ${label}`);
     n++;
   }

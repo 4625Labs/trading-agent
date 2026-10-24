@@ -1,5 +1,5 @@
 "use client";
-import { Card, Empty, Err, Loading, Poll, ago, host, usePoll } from "@/components/ui";
+import { Card, Empty, Err, Loading, Poll, ago, host, usePoll, Title } from "@/components/ui";
 
 function Generic({ rows }: { rows: any[] }) {
   if (!rows.length) return <Empty>No rows yet.</Empty>;
@@ -14,7 +14,7 @@ export default function Learning() {
   const { data: d, error, at } = usePoll<any>("/api/learning", 10000);
   return (
     <>
-      <h1>Learning <Poll at={at} error={error} /></h1>
+      <Title icon="learning" at={at} error={error}>Learning</Title>
       <Err msg={error && !d ? error : null} />
       {!d ? <Loading /> : (
         <>

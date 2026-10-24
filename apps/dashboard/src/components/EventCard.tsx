@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Icon from "@/components/Icon";
 import { ago, host } from "@/components/ui";
 import { kindOf, sentence, type Ev } from "@/lib/trace";
 
@@ -26,12 +27,12 @@ export default function EventCard({ e, link = true }: { e: Ev; link?: boolean })
   const k = kindOf(e.kind);
   return (
     <article className={`ev t-${k.tone}`}>
-      <div className="ico" aria-hidden>{k.icon}</div>
+      <div className="ico" aria-hidden><Icon name={k.icon} size={18} /></div>
       <div className="body">
         <div className="row"><span className="muted small">{k.label}</span><time className="muted small" title={new Date(e.ts).toLocaleString()}>{ago(e.ts)}</time></div>
         <div className="sent">{sentence(e)}</div>
         <details><summary>Details</summary><Details e={e} /></details>
-        {link && e.thesis_id && <Link className="small" href={`/trace/${e.thesis_id}`}>Why this trade?</Link>}
+        {link && e.thesis_id && <Link className="small tracelink" href={`/trace/${e.thesis_id}`}>Why this trade?</Link>}
       </div>
     </article>
   );

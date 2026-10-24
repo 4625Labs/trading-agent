@@ -1,3 +1,5 @@
+import { recordUsage } from "../usage.ts";
+
 /** context.dev client (search + scrape). Key from env; errors never include URLs or keys. */
 export interface Article {
   url: string;
@@ -16,10 +18,16 @@ export function contextDev(apiKey = process.env.CONTEXT_DEV_API_KEY, base = "htt
     try {
       res = await fetch(base + path, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } catch (e) {
+      recordUsage({ provider: "contextdev", endpoint: path, status: null });
       throw new Error(`context.dev ${path} request failed: ${(e as Error).name}`);
     }
-    if (!res.ok) throw new Error(`context.dev ${path} -> ${res.status}`);
-    return res.json();
+    if (!res.ok) {
+      recordUsage({ provider: "contextdev", endpoint: path, status: res.status });
+      throw new Error(`context.dev ${path} -> ${res.status}`);
+    }
+    const out = await res.json();
+    recordUsage({ provider: "contextdev", endpoint: path, status: res.status, creditsUsed: out?.key_metadata?.credits_consumed ?? null, creditsRemaining: out?.key_metadata?.credits_remaining ?? null });
+    return out;
   };
   return {
     async search(query, numResults = 5) {

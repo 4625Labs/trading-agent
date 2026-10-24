@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { recordUsage } from "./usage.ts";
 import type { ExchangeAdapter, Thesis, TradeResult } from "@trading-agent/shared";
 
 export interface BinanceConfig {
@@ -47,6 +48,7 @@ export class BinanceTestnetAdapter implements ExchangeAdapter {
     }
     const res = await fetch(`${this.baseUrl}${path}?${q}`, { method, headers: { "X-MBX-APIKEY": this.apiKey } });
     const body = await res.json().catch(() => ({}));
+    recordUsage({ provider: "binance", endpoint: `${method} ${path}`, status: res.status });
     if (!res.ok) throw new Error(`binance ${method} ${path} -> ${res.status} ${body.msg ?? ""}`.trim());
     return body;
   }
