@@ -162,7 +162,7 @@ if (autonomy) {
     if (!cfg.enabled || Date.now() - lastRun < cfg.intervalSeconds * 1000) return;
     lastRun = Date.now();
     const r = await runCycle(cycleDeps, cfg);
-    log(`cycle #${r.cycleId.slice(0, 8)}: ${r.newSignals} new signals, ${r.ideas} ideas, ${r.proposed} proposed`);
+    log(`cycle #${r.cycleId.slice(0, 8)}: ${r.newSignals} new signals, ${r.ideas} ideas, ${Array.isArray(r.proposed) ? r.proposed.length : r.proposed} proposed`);
   });
   every(60_000, "cycle-outcomes", () => updateCycleOutcomes(db));
   // Live control group: practice-only 'learned' vs 'equal' policies on the same signals. Uses the REAL price
