@@ -60,7 +60,7 @@ Think of it as a careful junior analyst who:
 ### Honest limits (say these out loud to judges)
 - The demo uses **practice money on a test exchange**, not real funds.
 - Price moves in the demo are **simulated and labelled as such**. Real trades close when the real price hits the limits.
-- Learning is shown on **replayed history** and on short live runs. On real price data the improvement is **within statistical noise**, and we say so. We do not claim it beats the market.
+- Learning is shown on **replayed history** and on short live runs. On real price data the improvement is **within statistical noise** (the hold-out test's interval includes zero), and we say so. We do not claim it beats the market.
 - The practice exchange only supports buying, so **"short" ideas run on pretend money only.**
 - Most news is low-confidence, so on its own the agent proposes few trades. That is by design.
 - This is **not financial advice.**
@@ -89,6 +89,8 @@ Think of it as a careful junior analyst who:
 - **Dashboard** (password protected, installable on a phone): Overview, Feed, Approvals plus "How did we do?" feedback, Demo (guided steps), Trace ("why this trade?" timeline), Integrations (call counts), Safety (kill switch), Learning, Preferences. Top navigation, modern dark theme with light option.
 - **Configurable cycles:** the agent's schedule is editable from the dashboard (interval from 2 minutes up, coins, confidence bar, trades per cycle, trade size, real orders on or off). Every cycle is numbered in a ledger with what it read, proposed, closed and earned.
 - **100-cycle replay:** walks forward through about 17 days of real 4-hour prices, 100 decision rounds, using the same safety, practice-trade and learning code as the live agent. One button on the dashboard; runs in about 30 seconds. An optional version has Claude write the trade ideas with and without the learned lessons.
+- **Time machine (hold-out test):** picks 25 random moments in 2 years of real prices; for each, the agent learns for 30 rounds, **freezes** what it learned, and is tested on the next 20 rounds it has never seen, against an agent that treats all sources equally. Free, about 6 seconds, one button on the Replay page.
+- **Live control group:** every 5 minutes two practice-only policies (learned weights vs equal weights) decide on the same live signals, so we can see whether learning helps going forward. Needs about 20 closed trades per policy before any comparison is meaningful.
 - **Practice vs real comparison ("Execution" page):** for each long trade, practice fill vs real fill, fees and profit, with the practice engine nudging its own slippage and fee settings toward what real fills show. Shorts and demo trades are excluded and counted.
 - **Integration usage tracking:** every call to context.dev, Claude, Binance testnet and Omnara is counted. At last check context.dev showed 3 calls, no errors, and 1,025 credits remaining.
 - **Database** (Supabase): 12 tables, access locked down, all changes recorded.
@@ -125,6 +127,14 @@ Think of it as a careful junior analyst who:
 - One path, about 17 days of data, high variance. It is a historical replay, not live trading.
 
 **What to say to judges (updated):** "We tested whether the agent can tell good information from bad. It can, when there is signal to find. On real price data over 100 rounds the improvement is within noise, and the dashboard says so on screen. We would rather show you an honest chart than a flattering one."
+
+**The stricter test: the "time machine" (25 random windows, learn, freeze, then test on unseen rounds; 2 years of real 4-hour prices):**
+| Sources | Average gain from learning, per 20-round test | 95% interval | Windows learner won |
+|---|---|---|---|
+| Real price-based sources only | -0.61 USD | -15.06 to +13.84 | 10 of 25 (40%) |
+| Plus planted sources with a known edge | +13.12 USD | +5.41 to +20.83 | 18 of 25 (72%) |
+
+**Read this carefully:** with real price-based signals the interval straddles zero, so there is **no reliable improvement** from learning. When the data contains an edge we planted on purpose, the frozen learner beat equal weighting in 72% of windows (sign-test p = 0.043), so **the learning mechanism works when there is something to learn.** The real price-based strategies hit about 35% of trades, which is near break-even after costs for a 2%/4% stop and target, so there was little to learn. Our learned weights for those sources (about 0.56 to 1.17) are best read as noise.
 
 **Claude A/B (done, 198 Claude calls):** the same 100 rounds with Claude writing the trade ideas, once with the learned lessons and once without.
 | | Profit | Trades | Won | Worst dip |

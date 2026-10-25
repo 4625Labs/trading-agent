@@ -129,6 +129,15 @@ $$
 
 The learner finished ahead, but with $z = 1.43$ that gap is **not distinguishable from luck**, and on the real price-based sources alone it finished 3 USD *behind*. What we *can* claim is narrower and still useful: given sources whose true quality we secretly planted (about 65%, 50%, and 35% accurate), the learner ranked them correctly, with weights near $1.60$, $0.78$, and $0.30$. The mechanism works **when a real edge exists**; on this real data, over this window, we found no reliable edge to learn.
 
+We then ran the stricter question you would ask of any trading idea: *does what it learned help on data it has never seen?* The **time machine** picks 25 random moments in two years of real prices; in each, the agent learns for 30 rounds, we **freeze** what it learned, and we test on the next 20 rounds against an equal-weight agent. The difference per window is $\Delta_k$, and we report its mean with a 95% interval.
+
+| Sources | Mean $\Delta$ per test | 95% interval | Learner won |
+|---|---|---|---|
+| Real price-based sources only | $-0.61$ USD | $[-15.06,\ +13.84]$ | 10 of 25 |
+| Plus planted sources with a known edge | $+13.12$ USD | $[+5.41,\ +20.83]$ | 18 of 25 ($p = 0.043$) |
+
+On real price signals the interval includes zero: **no reliable improvement.** When the data contains an edge we planted, the frozen learner won 72% of windows. So the mechanism works when there is something to find, and on this real data there was almost nothing to find: those strategies win about 35% of trades, close to break-even after costs for our stop and target. A live control group now runs the learned and equal-weight policies side by side on real signals, practice-only, to keep testing going forward.
+
 We then asked whether giving Claude our learned lessons improves its own trade ideas (198 Claude calls over the same 100 rounds):
 
 | Claude writing the ideas | Profit | Trades | Won |
