@@ -83,6 +83,10 @@ Deploy to Freestyle: see [`docs/DEPLOY.md`](docs/DEPLOY.md) (`node --env-file=.e
 
 Reproduce the replays (free, no Claude calls): `node --experimental-strip-types scripts/replay-100.mjs` and `node --experimental-strip-types scripts/replay-rolling.mjs`.
 
+## License
+
+MIT. See [`LICENSE`](LICENSE).
+
 ## Safety and honesty
 
 - Safety rules are plain, unit-tested code between the model and any order. The model's only power is to ask.
