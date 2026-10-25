@@ -166,51 +166,78 @@ function loadCycles() {
 }
 function d5() {
   const s = Spec("05-does-it-learn");
+  const GR = "#495057";
   s.text("Does it learn? The honest answer", 0, 28, W, { size: 40, bold: true, color: C.indigo });
-  // left panel
-  s.rect(60, 110, 700, 650, { fill: "#fbfbff", stroke: "#ced4da" });
-  s.text("Can it tell good news from bad?", 60, 130, 700, { size: 28, bold: true });
-  s.text("Yes. We planted sources we knew were good, random or backwards.", 60, 172, 700, { size: 18, color: "#495057" });
+  // ---- panel 1: can it tell good news from bad (horizontal bars)
+  s.rect(60, 100, 700, 350, { fill: "#fbfbff", stroke: "#ced4da" });
+  s.text("Can it tell good news from bad?", 60, 112, 700, { size: 28, bold: true });
+  s.text("Yes. We planted sources we knew were good, random or backwards.", 60, 152, 700, { size: 18, color: GR });
   const bars = [["Good source", 1.6, C.green], ["Random", 0.78, C.gray], ["Backwards", 0.3, C.red]];
-  const base = 650, maxH = 340, bw2 = 140, bx0 = 130, bgap = 80;
-  s.line([[bx0 - 30, base], [bx0 - 30 + 3 * bw2 + 2 * bgap + 60, base]], { color: C.ink });
   bars.forEach(([l, v, col], i) => {
-    const h = (v / 1.6) * maxH, x = bx0 + i * (bw2 + bgap);
-    s.rect(x, base - h, bw2, h, { fill: col, stroke: col, r: false });
-    s.text(v.toFixed(2), x, base - h - 34, bw2, { size: 24, bold: true });
-    s.text(l, x, base + 14, bw2, { size: 20 });
+    const y = 200 + i * 62, len = (v / 1.6) * 370;
+    s.text(l, 80, y + 8, 170, { size: 22, align: "right" });
+    s.rect(270, y, len, 44, { fill: col, stroke: col, r: false });
+    s.text(v.toFixed(2), 270 + len + 12, y + 7, 80, { size: 24, bold: true, align: "left" });
   });
-  s.text("How much the agent learned to trust each source", 60, 700, 700, { size: 18, color: "#495057" });
-  // right panel
-  s.rect(820, 110, 720, 650, { fill: "#fbfbff", stroke: "#ced4da" });
-  s.text("Profit over 100 rounds", 820, 130, 720, { size: 28, bold: true });
-  s.text("Past prices, learner vs equal-weight baseline", 820, 172, 720, { size: 18, color: "#495057" });
+  s.line([[270, 192], [270, 380]], { color: C.ink });
+  s.text("How much the agent learned to trust each source", 60, 408, 700, { size: 18, color: GR });
+  // ---- panel 2: profit over 100 rounds
+  s.rect(820, 100, 720, 350, { fill: "#fbfbff", stroke: "#ced4da" });
+  s.text("Profit over 100 rounds", 820, 112, 720, { size: 28, bold: true });
+  s.text("Past prices: learner vs equal-weight baseline", 820, 152, 720, { size: 18, color: GR });
   const rows = loadCycles();
   const arms = { learner: [], baseline: [] };
   for (const r of rows) arms[r.arm]?.push([Number(r.n), Number(r.cum_pnl)]);
   for (const a in arms) arms[a].sort((p, q) => p[0] - q[0]);
   const all = [...arms.learner, ...arms.baseline].map((p) => p[1]);
   const lo = Math.min(0, ...all), hi = Math.max(...all);
-  const cx0 = 910, cx1 = 1440, cy0 = 270, cy1 = 620; // chart box
+  const cx0 = 900, cx1 = 1500, cy0 = 195, cy1 = 368;
   const nmax = Math.max(...arms.learner.map((p) => p[0]), 1), nmin = Math.min(...arms.learner.map((p) => p[0]));
   const X = (n) => cx0 + ((n - nmin) / (nmax - nmin)) * (cx1 - cx0);
   const Y = (v) => cy1 - ((v - lo) / (hi - lo)) * (cy1 - cy0);
-  s.line([[cx0, cy0 - 10], [cx0, cy1]], { color: C.ink });
+  s.line([[cx0, cy0 - 5], [cx0, cy1]], { color: C.ink });
   s.line([[cx0, Y(0)], [cx1, Y(0)]], { color: C.gray, dashed: true, sw: 1 });
-  s.text("$0", 850, Y(0) - 12, 50, { size: 18, color: "#495057", align: "right" });
-  const tickV = [50, 100].filter((v) => v < hi);
-  tickV.forEach((v) => { s.line([[cx0, Y(v)], [cx1, Y(v)]], { color: "#dee2e6", sw: 1 }); s.text("$" + v, 850, Y(v) - 12, 50, { size: 18, color: "#495057", align: "right" }); });
+  s.text("$0", 840, Y(0) - 11, 50, { size: 17, color: GR, align: "right" });
+  [50, 100].filter((v) => v < hi).forEach((v) => { s.line([[cx0 - 6, Y(v)], [cx0, Y(v)]], { color: C.ink }); s.text("$" + v, 840, Y(v) - 11, 50, { size: 17, color: GR, align: "right" }); });
   s.line(arms.baseline.map((p) => [X(p[0]), Y(p[1])]), { color: C.cyan, sw: 3 });
   s.line(arms.learner.map((p) => [X(p[0]), Y(p[1])]), { color: C.indigo, sw: 3 });
-  s.text("round 1", cx0 - 30, cy1 + 12, 60, { size: 18, color: "#495057" });
-  s.text("round 100", cx1 - 50, cy1 + 12, 100, { size: 18, color: "#495057" });
+  s.text("round 1", cx0 - 30, cy1 + 4, 60, { size: 17, color: GR });
+  s.text("round 100", cx1 - 80, cy1 + 4, 100, { size: 17, color: GR });
   const fl = arms.learner.at(-1)[1], fb = arms.baseline.at(-1)[1];
-  s.text(`Learner: ends +$${Math.round(fl)}`, 930, 285, 300, { size: 22, bold: true, color: C.indigo, align: "left" });
-  s.text(`Equal-weight: ends +$${Math.round(fb)}`, 930, 320, 320, { size: 22, bold: true, color: "#0b7285", align: "left" });
-  s.rect(900, 660, 330, 46, { fill: C.sand, stroke: C.orange });
-  s.text("within noise on real data", 900, 670, 330, { size: 22, bold: true, color: "#b35c00" });
-  s.text("z = 1.43: not provably better than luck. With price-only\nsources the learner was $3 behind.", 900, 708, 620, { size: 18, color: "#495057", align: "left" });
-  s.text("Replay on past prices, 100 rounds. Not live trading.", 0, 828, W, { size: 22, color: "#495057" });
+  s.text(`Learner: ends +$${Math.round(fl)}`, 930, 192, 300, { size: 20, bold: true, color: C.indigo, align: "left" });
+  s.text(`Equal-weight: ends +$${Math.round(fb)}`, 930, 220, 320, { size: 20, bold: true, color: "#0b7285", align: "left" });
+  s.rect(930, 256, 320, 40, { fill: C.sand, stroke: C.orange });
+  s.text("within noise on real data", 930, 264, 320, { size: 21, bold: true, color: "#b35c00" });
+  s.text("z = 1.43: not provably better than luck. With price-only\nsources the learner was $3 behind.", 840, 400, 680, { size: 17, color: GR, align: "left" });
+  // ---- panel 3: time machine
+  s.rect(60, 470, 1480, 345, { fill: "#fbfbff", stroke: "#ced4da" });
+  s.text("Time machine: learn, freeze, test on unseen rounds", 60, 480, 1480, { size: 28, bold: true });
+  s.text("25 random moments in 2 years of real prices: learn 30 rounds, freeze, test on the next 20. Bars: learner minus equal-weight.", 60, 518, 1480, { size: 18, color: GR });
+  const wins = JSON.parse(fs.readFileSync(path.join(OUT, "rolling-deltas.json"), "utf8")).sort((p, q) => p.k - q.k);
+  const dv = wins.map((w) => w.delta);
+  const mean = dv.reduce((p, q) => p + q, 0) / dv.length;
+  const ciLo = -15.06, ciHi = 13.84;
+  const vmax = Math.ceil(Math.max(...dv, ciHi) / 10) * 10, vmin = Math.floor(Math.min(...dv, ciLo) / 10) * 10;
+  const by0 = 552, by1 = 698, bx0 = 150, bx1 = 960;
+  const BY = (v) => by1 - ((v - vmin) / (vmax - vmin)) * (by1 - by0);
+  s.rect(bx0, BY(ciHi), bx1 - bx0, BY(ciLo) - BY(ciHi), { fill: C.lav, stroke: C.lav, r: false });
+  for (let v = Math.ceil(vmin / 50) * 50; v <= vmax; v += 50) { s.line([[bx0 - 6, BY(v)], [bx0, BY(v)]], { color: C.ink }); s.text((v > 0 ? "+" : v < 0 ? "-" : "") + "$" + Math.abs(v), 70, BY(v) - 11, 70, { size: 17, color: GR, align: "right" }); }
+  s.line([[bx0, by0 - 4], [bx0, by1 + 2]], { color: C.ink });
+  const slot = (bx1 - bx0) / dv.length, bw3 = slot * 0.62;
+  dv.forEach((v, i) => {
+    const x = bx0 + i * slot + (slot - bw3) / 2, y0 = BY(0), y1 = BY(v);
+    s.rect(x, Math.min(y0, y1), bw3, Math.max(Math.abs(y1 - y0), 1), { fill: v >= 0 ? C.green : C.red, stroke: v >= 0 ? C.green : C.red, r: false });
+  });
+  s.line([[bx0, BY(0)], [bx1, BY(0)]], { color: C.ink, sw: 2 });
+  s.line([[bx0, BY(mean)], [bx1, BY(mean)]], { color: C.indigo, sw: 2, dashed: true });
+  s.text("each bar = one random moment, earliest to latest", bx0, by1 + 8, bx1 - bx0, { size: 17, color: GR });
+  s.text(`Average gain: -$0.61 per test`, 1010, 556, 500, { size: 26, bold: true, color: C.indigo, align: "left" });
+  s.text("Dashed line = the average.\nShaded band = 95% interval\n(-$15.06 to +$13.84).\nIt includes zero, so the gain\ncould just be luck.", 1010, 600, 500, { size: 19, color: GR, align: "left" });
+  s.rect(100, 738, 700, 64, { fill: "#f1f3f5", stroke: C.gray });
+  s.text("Real data: no reliable improvement\n(interval -15 to +14, won 10 of 25)", 100, 744, 700, { size: 20, bold: true, color: "#343a40" });
+  s.rect(840, 738, 660, 64, { fill: C.mint, stroke: C.green });
+  s.text("With a planted edge: learning works\n(won 18 of 25, p = 0.043)", 840, 744, 660, { size: 20, bold: true, color: "#2b8a3e" });
+  s.text("Replay on past prices (100 rounds) and 25 learn-freeze-test windows. Not live trading.", 0, 835, W, { size: 22, color: GR });
   return s;
 }
 
