@@ -53,7 +53,9 @@ async function register(id: string) {
   await db.pool.query("insert into agents(id,name,status) values ($1,'trading-agent','active') on conflict (id) do update set status='active'", [id]);
 }
 async function loadActiveAgents() {
-  for (const r of (await db.pool.query("select id from agents where status='active'")).rows) worker.agents.add(r.id);
+  const active = new Set<string>((await db.pool.query("select id from agents where status='active'")).rows.map((r) => r.id));
+  for (const a of [...worker.agents]) if (!active.has(a)) worker.agents.delete(a); // retired agents drop out
+  for (const id of active) worker.agents.add(id);
 }
 
 if (cmd === "launch") {
@@ -129,7 +131,7 @@ every(5 * 60_000, "learning", async () => {
 if (cmd === "serve") every(60_000, "agents", loadActiveAgents);
 
 // Demo/ops commands queued from the dashboard.
-const cmdDeps = { db, omnara, agent: firstAgent, llm: anthropicLlm(), price: getPrice, walletUsd: async () => (real ? real.freeBalance("USDT") : 10_000), log };
+const cmdDeps = { db, omnara, agentState: (a: string) => omnara.state(a), agent: firstAgent, llm: anthropicLlm(), price: getPrice, walletUsd: async () => (real ? real.freeBalance("USDT") : 10_000), log };
 every(4_000, "commands", () => pollCommands(cmdDeps));
 
 // Configurable cycles (agent_config), numbered in the `cycles` ledger: news -> signals -> ideas -> agent.
@@ -138,6 +140,7 @@ if (autonomy) {
   const cycleDeps = {
     db,
     omnara,
+    agentState: (a: string) => omnara.state(a),
     agents: () => [...worker.agents],
     llm: anthropicLlm(),
     price: getPrice,

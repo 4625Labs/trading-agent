@@ -2,6 +2,7 @@
 import Chart from "@/components/Chart";
 import Integrations from "@/components/Integrations";
 import { ShadowCompact } from "@/components/ShadowPanel";
+import ExecCounts from "@/components/ExecCounts";
 import Icon from "@/components/Icon";
 import Link from "next/link";
 import { Badge, Card, Count, Empty, Err, Loading, Title, ago, pct, px, usePoll, usd } from "@/components/ui";
@@ -39,8 +40,11 @@ export default function Overview() {
             {u ? <Integrations usage={u} /> : <div className="sk" style={{ height: 120 }} />}
           </Card>
           <Card title="Sim vs real" icon="bars" right={<Link className="small" href="/execution">Details</Link>}>
-            {!ex ? <div className="sk" style={{ height: 56 }} /> : !ex.summary.n ? <div className="muted small">No closed long trades with a real fill yet. Shorts, demo trades and unfilled real legs are excluded.</div> : (
-              <div className="levels" style={{ marginTop: 0 }}><span>Compared <b>{ex.summary.n}</b></span><span>Avg slippage gap <b>{ex.summary.avgSlippageBps === null ? "-" : ex.summary.avgSlippageBps.toFixed(1) + " bps"}</b></span><span>Sim PnL <b>{usd(ex.summary.simPnl)}</b></span><span>Real PnL <b>{usd(ex.summary.realPnl)}</b></span></div>
+            {!ex ? <div className="sk" style={{ height: 56 }} /> : !ex.summary.entryN ? <div className="muted small"><b>No real exchange trades yet.</b> <ExecCounts c={ex.counts} compact /></div> : (
+              <>
+                <div className="levels" style={{ marginTop: 0 }}><span>Entries compared <b>{ex.summary.entryN}</b></span><span>Avg slippage gap <b>{ex.summary.avgSlippageBps === null ? "-" : ex.summary.avgSlippageBps.toFixed(1) + " bps"}</b></span>
+                  {ex.summary.exitN ? <><span>Sim PnL <b>{usd(ex.summary.simPnl)}</b></span><span>Real PnL <b>{usd(ex.summary.realPnl)}</b> ({ex.summary.exitN})</span></> : <span className="muted">Profit gap: waiting for a closed trade with both legs</span>}</div>
+              </>
             )}
           </Card>
           <Card title="Live shadow test: learned vs equal weights" icon="learning" right={<Link className="small" href="/replay">Details</Link>}><ShadowCompact /></Card>

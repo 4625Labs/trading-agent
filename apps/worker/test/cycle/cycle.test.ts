@@ -118,3 +118,36 @@ test("updateCycleOutcomes links by window+asset/direction and fills outcomes (ro
     assert.equal(r2.linked, 0);
   } finally { await c.query("rollback"); c.release(); await db.close(); }
 });
+
+test("runCycle: does not queue proposals while the agent is waiting on an open question", async () => {
+  const pool = fakePool({});
+  const sent: string[] = [];
+  const res = await runCycle({
+    db: { pool }, omnara: { send: async (_a: string, t: string) => { sent.push(t); } }, agents: () => ["ag"],
+    agentState: async () => "waiting_on_interaction",
+    llm: async () => JSON.stringify({ theses: [th("BTC", 0.9)] }),
+    price: async () => 100, walletUsd: 2000,
+    readers: { prefs: async () => prefs, readSignals: async () => [sig("a", "BTC")], lessons: async () => [] },
+    ingest: async () => ({ searches: 3, articles: 4, extracted: 3, inserted: 3, duplicates: 0, errors: 0 }),
+    emit: async () => {},
+  }, { ...DEFAULT_CONFIG, confidenceBar: 0.5, maxTradesPerCycle: 3, tradeSizeUsd: 30 });
+  assert.equal(sent.length, 0);
+  assert.equal(res.proposed.length, 0);
+  assert.match(res.notes, /waiting on an open question/);
+});
+
+test("runCycle: the repeat check also looks at proposals already sent (agent_events)", async () => {
+  const calls: string[] = [];
+  const pool = { async query(sql: string) { calls.push(sql); if (/insert into cycles/.test(sql)) return { rows: [{ id: "c" }], rowCount: 1 }; if (/from theses where asset/.test(sql)) return { rows: [{}], rowCount: 1 }; if (/from lessons/.test(sql)) return { rows: [{ c: 0 }], rowCount: 1 }; return { rows: [], rowCount: 0 }; } };
+  const sent: string[] = [];
+  const res = await runCycle({
+    db: { pool }, omnara: { send: async (_a: string, t: string) => { sent.push(t); } }, agents: () => ["ag"],
+    llm: async () => JSON.stringify({ theses: [th("BTC", 0.9)] }),
+    price: async () => 100, walletUsd: 2000,
+    readers: { prefs: async () => prefs, readSignals: async () => [sig("a", "BTC")], lessons: async () => [] },
+    ingest: async () => ({ searches: 3, articles: 4, extracted: 3, inserted: 3, duplicates: 0, errors: 0 }),
+    emit: async () => {},
+  }, { ...DEFAULT_CONFIG, confidenceBar: 0.5, maxTradesPerCycle: 3, tradeSizeUsd: 30 });
+  assert.equal(sent.length, 0);
+  assert.ok(calls.some((c) => /agent_events where kind='thesis_proposed'/.test(c)));
+});

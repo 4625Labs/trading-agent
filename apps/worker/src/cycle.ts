@@ -77,6 +77,8 @@ export async function saveConfig(db: { pool: Queryable }, patch: Record<string, 
 export interface CycleDeps {
   db: { pool: Queryable };
   omnara: Pick<Omnara, "send">;
+  /** optional: the agent's activity state; when it is waiting on an open question we do not queue more proposals */
+  agentState?: (agent: string) => Promise<string | undefined>;
   /** active agent ids; the first one receives proposals */
   agents: () => string[];
   llm: LlmFn;
@@ -131,13 +133,18 @@ export async function runCycle(deps: CycleDeps, cfg: AgentConfig): Promise<Cycle
       prefs: async () => ({ ...prefs, allowedAssets: allowed, minConfidence: cfg.confidenceBar }),
     });
     ideas = theses.length;
+    let blocked = false;
+    if (agent && deps.agentState) {
+      const st = await deps.agentState(agent).catch(() => undefined);
+      if (st === "waiting_on_interaction") { blocked = true; notes.push("agent is waiting on an open question; not proposing more"); log("agent waiting on an open question; not queueing new proposals"); }
+    }
     const cap = prefs.maxPositionPct * wallet;
     const ranked = [...theses].sort((a, b) => b.confidence - a.confidence);
     for (const t of ranked) {
       if (proposed.length >= cfg.maxTradesPerCycle) break;
-      if (!agent) break;
+      if (!agent || blocked) break;
       const dup = await deps.db.pool.query(
-        "select 1 from theses where asset=$1 and direction=$2 and status in ('proposed','pending_approval','executed') and created_at > now() - interval '6 hours' limit 1",
+        "select 1 where exists (select 1 from theses where asset=$1 and direction=$2 and status in ('proposed','pending_approval','executed') and created_at > now() - interval '6 hours') or exists (select 1 from agent_events where kind='thesis_proposed' and detail->>'asset'=$1 and detail->>'direction'=$2 and ts > now() - interval '6 hours')",
         [t.asset, t.direction],
       );
       if (dup.rowCount) { log(`skip ${t.asset} ${t.direction}: similar thesis already active`); notes.push(`skipped ${t.asset} ${t.direction} (similar active)`); continue; }

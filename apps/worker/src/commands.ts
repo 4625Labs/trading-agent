@@ -25,6 +25,7 @@ export interface CommandDeps {
   db: Db;
   omnara: Pick<Omnara, "send">;
   agent: () => string | undefined;
+  agentState?: (agent: string) => Promise<string | undefined>;
   llm: LlmFn;
   price: (asset: string) => Promise<number>;
   walletUsd: () => Promise<number>;
@@ -35,6 +36,7 @@ export interface CommandDeps {
 export async function demoIdea(d: CommandDeps): Promise<string> {
   const a = d.agent();
   if (!a) return "no active agent";
+  if (d.agentState && (await d.agentState(a).catch(() => undefined)) === "waiting_on_interaction") return "the agent is waiting on an open question; answer it first, otherwise this idea would just queue behind it";
   const readers = pgThesisReaders(d.db);
   const theses = await generateTheses({
     ...readers,
