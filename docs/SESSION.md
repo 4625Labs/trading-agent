@@ -1,11 +1,12 @@
 # Trading Agent: Session Notes and Business Story
 
-Last updated: 2026-10-24 (evening). Hackathon: Agent Builders (build 11:00 to 17:30, demos 18:00). Team of two.
+Last updated: 2026-10-25 (just after midnight, UTC). Hackathon: Agent Builders (build 11:00 to 17:30, demos 18:00). Team of two.
 Judges score: **useful, production-ready, live demo works.**
 
-- Code: github.com/4625Labs/trading-agent (private)
+- Code: github.com/4625Labs/trading-agent (**public**, MIT license, full README)
 - Live dashboard: https://trading-agent-b9ea.style.dev (password protected)
 - Live worker health: https://trading-agent-b9ea-worker.style.dev/health
+- Devpost text, ready to paste: `docs/DEVPOST.md` · Project story: `docs/PROJECT_STORY.md` · Diagrams: `docs/diagrams/`
 
 ---
 
@@ -81,7 +82,7 @@ Think of it as a careful junior analyst who:
 
 **Built, deployed, and tested**
 - **Cloud deployment on Freestyle:** worker and dashboard run as always-on services with a public web address, restart themselves after a crash, and keep running without the laptop. One-command deploy and redeploy (about 7 seconds).
-- **News to trade ideas:** context.dev searches the web (about 3 searches per cycle, every 30 minutes); Claude Haiku extracts signals; Claude Sonnet writes trade ideas. Every idea is checked in code before it goes anywhere (price forced to the live price, sensible stop and target, size within limits).
+- **News to trade ideas:** context.dev searches the web (about 3 searches per cycle; the schedule is set to every 5 minutes, editable on the Cycles page); Claude Haiku extracts signals; Claude Sonnet writes trade ideas. Every idea is checked in code before it goes anywhere (price forced to the live price, sensible stop and target, size within limits).
 - **Safety rules engine:** kill switch, banned or unlisted coins, size limit, exposure limit, daily loss limit, order rate limit, wrong-side stop or target, and "needs approval" for big or low-confidence trades. Unit tested. The AI cannot override it.
 - **Pretend-money engine** and **real practice-exchange connection** (Binance.US testnet, buy and sell verified live).
 - **Human approvals (Omnara):** approve, reject, small trade goes straight through, and oversize trade is blocked. All tried by hand in the browser. Approving from our own dashboard also works.
@@ -91,21 +92,29 @@ Think of it as a careful junior analyst who:
 - **100-cycle replay:** walks forward through about 17 days of real 4-hour prices, 100 decision rounds, using the same safety, practice-trade and learning code as the live agent. One button on the dashboard; runs in about 30 seconds. An optional version has Claude write the trade ideas with and without the learned lessons.
 - **Time machine (hold-out test):** picks 25 random moments in 2 years of real prices; for each, the agent learns for 30 rounds, **freezes** what it learned, and is tested on the next 20 rounds it has never seen, against an agent that treats all sources equally. Free, about 6 seconds, one button on the Replay page.
 - **Live control group:** every 5 minutes two practice-only policies (learned weights vs equal weights) decide on the same live signals, so we can see whether learning helps going forward. Needs about 20 closed trades per policy before any comparison is meaningful.
-- **Practice vs real comparison ("Execution" page):** for each long trade, practice fill vs real fill, fees and profit, with the practice engine nudging its own slippage and fee settings toward what real fills show. Shorts and demo trades are excluded and counted.
+- **Practice vs real comparison ("Execution" page):** two sections. *Entry fills*: every trade with both a practice and a real fill (entry fills are real even when a demo exit is faked). *Exit and profit gap*: closed, non-demo longs only. The practice engine nudges its own slippage and fee settings toward what real fills show. Shorts have no real leg and are counted, not hidden; with no real trades the page explains why instead of showing a blank.
 - **Integration usage tracking:** every call to context.dev, Claude, Binance testnet and Omnara is counted. At last check context.dev showed 3 calls, no errors, and 1,025 credits remaining.
-- **Database** (Supabase): 12 tables, access locked down, all changes recorded.
-- **Tests:** 57 automated tests for the worker (plus 2 skipped) and 3 for the dashboard, all passing, including a proof that the replay cannot see the future.
+- **Database** (Supabase): about 20 tables across 10 migrations, access locked down (row-level security on everything), all changes recorded.
+- **Guard against a blocked agent:** the agent handles one question at a time. Cycles and the demo button no longer propose anything while it is waiting on an open question, repeat ideas are also checked against proposals already sent, and retired agents drop out of the worker.
+- **Public repo:** MIT license, a full README with diagrams and the honest results table, and a clean secret scan of the whole history.
+- **Tests:** 76 automated tests pass for the worker (4 skipped, 0 failed) and 3 for the dashboard, including proofs that the replay and the time machine cannot see the future.
 
 **Proven live**
 - Full chain on the deployed system: news, signals, idea, safety check, approval, practice trade, simulated price move, close, trace.
-- The deployed worker ran its own news cycle without the laptop.
+- The deployed worker ran its own news cycle without the laptop, on a 5-minute schedule.
+- A real $10 BTC long on the exchange testnet alongside its practice twin: practice fill 80,405.34, real fill 80,785.92, a **47 bps gap with real worse** (we model 5 bps). The practice engine will recalibrate as more fills arrive.
+- The time machine ran on the live worker and reproduced the local numbers exactly (same mean, interval and window count).
+- The live control group is trading: each policy has opened practice trades, and the learned policy was seeded from the time machine's weights.
 
 **Not yet verified (be honest about these)**
-- The new design has been checked by page responses only; nobody on the team has reviewed it in a browser or on a phone yet.
+- The new design and the Replay, Cycles and Execution pages have been checked by page responses only; nobody on the team has reviewed them in a browser or on a phone yet.
 - The dashboard's feedback buttons have not been used end to end on the live system.
+- The `.excalidraw` files have not been opened in Excalidraw itself (the PNG and SVG versions were checked by eye).
 - A full rehearsal of the demo script, start to finish, with a stopwatch.
 - A formal "close the laptop" test (the deployed worker has been running on its own, but we have not staged the moment).
-- Devpost submission (live URL, repo, short video).
+- The exit and profit part of the Execution page: it waits for the real BTC long to close at its stop or target (could take hours).
+- The live control group needs about 20 closed trades per policy before any learned-vs-equal comparison means anything.
+- Devpost: screenshots of Trace and Demo, the judge password in the private instructions, and the submission itself.
 
 ---
 
@@ -172,6 +181,8 @@ The formatting failures went away, but even with the "do not size up" line, Clau
 - **Omnara cannot hand back stored secrets.** Exchange keys are copied from our local settings file to the cloud machine with owner-only permissions and never printed.
 - **Secrets hygiene:** a database password once appeared in a tool's output during a misconfiguration; it has since been rotated. Keys live only in the local settings file and the cloud machine's owner-only copy.
 - **Test data cleared** before deployment; the database starts clean.
+- **The blocked-agent incident.** A stale feedback question left over from the old feedback flow kept the agent waiting for hours, and every cycle kept queuing the same idea behind it: 21 proposals, 19 of them an identical BTC short. We noticed only because the Execution page was empty. Fix: retired that agent and started a clean one (the queue was discarded, not executed), cycles and the demo button now refuse to propose into a waiting agent, repeat checks include proposals already sent, and the worker drops retired agents. The earlier lesson stands: one agent, one question at a time.
+- **Lessons were diagnosed and the live prompt reframed** (descriptive weak evidence, no commands, minimum 8 trades, source credit only for agreeing signals). The reframed version did not beat having no lessons on two small windows, so the honest position is "not shown to help".
 
 ---
 
@@ -192,6 +203,8 @@ Cloud box (Freestyle): Agent worker + Dashboard. Arrows to: Supabase (memory), O
 
 **Image 5: "Does it learn?" (honest version)**
 Two panels. Left: "Can it tell good news from bad?" with bars good / random / backwards showing the learned trust ranking (yes). Right: a two-line chart of profit over 100 rounds, learner vs equal-weight, with the label "within noise on real data" and the footer "Replay on past prices, 100 rounds. Not live trading."
+
+**Note:** image 5 currently shows the 100-round replay. The stricter time-machine result (real sources: no reliable improvement, interval -15 to +14; with a planted edge: learner won 18 of 25 windows) is not drawn yet; add it as a small third panel if there is time.
 
 ---
 
