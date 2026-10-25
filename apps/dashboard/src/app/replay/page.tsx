@@ -2,6 +2,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import Icon from "@/components/Icon";
+import TimeMachine from "@/components/TimeMachine";
+import ShadowPanel from "@/components/ShadowPanel";
 import LineChart, { type S } from "@/components/LineChart";
 import { Badge, Card, Empty, Err, Loading, Title, ago, post, usd, usePoll } from "@/components/ui";
 
@@ -56,6 +58,11 @@ export default function Replay() {
     <>
       <Title icon="learning" at={at} error={error}>100-cycle replay</Title>
       <p><Link href="/learning">Back to Learning</Link></p>
+      <h2 style={{ margin: "8px 0 10px" }}>Time machine</h2>
+      <TimeMachine />
+      <h2 style={{ margin: "22px 0 10px" }}>Live control group</h2>
+      <ShadowPanel />
+      <h2 style={{ margin: "22px 0 10px" }}>100-cycle replay</h2>
       <Err msg={error && !d ? error : null} />
       {!d ? <Loading /> : (
         <>

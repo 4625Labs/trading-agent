@@ -6,6 +6,7 @@ import { emit } from "./trace.ts";
 import { applyFeedback } from "./feedback.ts";
 import { runLearningCycle } from "./learning/cycle.ts";
 import { runReplay100 } from "./replay/index.ts";
+import { runRollingTest } from "./replay/rolling.ts";
 
 /** Demo price overrides apply ONLY to the close-out watcher, never to fills, guardrails or real orders. */
 export const priceOverrides = new Map<string, { price: number; until: number }>();
@@ -92,6 +93,16 @@ export async function replayCommand(d: CommandDeps, payload: { llm?: boolean; se
   return `replay started (${withLlm ? "with Claude A/B" : "math only"}, seed ${seed}); progress shows on the Replay page`;
 }
 
+/** Time machine: learn on random past windows, freeze, test on the unseen stretch. Free (no LLM); runs in the background. */
+export async function rollingCommand(d: CommandDeps, payload: { windows?: number; seed?: number }): Promise<string> {
+  const running = await d.db.pool.query("select 1 from rolling_runs where status='running' limit 1");
+  if (running.rowCount) return "a time machine run is already running";
+  const windows = Number.isInteger(payload?.windows) && payload.windows! >= 5 && payload.windows! <= 60 ? Number(payload.windows) : 25;
+  const seed = Number.isInteger(payload?.seed) ? Number(payload.seed) : 42;
+  void runRollingTest({ pool: d.db.pool, windows, learnCycles: 30, testCycles: 20, seed, log: d.log }).catch((e) => d.log(`time machine failed: ${(e as Error).message}`));
+  return `time machine started (${windows} windows, seed ${seed}); results appear on the Replay page`;
+}
+
 /** Claim and run pending commands from the dashboard. Each command is claimed atomically. */
 export async function pollCommands(d: CommandDeps) {
   const pending = await d.db.pool.query("select id,kind,payload from commands where status='pending' order by created_at limit 5");
@@ -105,6 +116,7 @@ export async function pollCommands(d: CommandDeps) {
       else if (c.kind === "demo_price_move" && (c.payload?.outcome === "target" || c.payload?.outcome === "stop")) result = await demoPriceMove(d, c.payload.outcome);
       else if (c.kind === "feedback") result = await feedbackCommand(d, c.payload);
       else if (c.kind === "replay_run") result = await replayCommand(d, c.payload);
+      else if (c.kind === "rolling_run") result = await rollingCommand(d, c.payload);
       else {
         status = "failed";
         result = `unknown command ${c.kind}`;

@@ -159,3 +159,4 @@ input[type=range]{width:100%;accent-color:var(--violet);min-height:32px}
 .pair{display:grid;gap:6px;margin:8px 0}.pair .r{display:grid;grid-template-columns:90px 1fr 70px;align-items:center;gap:8px;font-size:.8rem}
 .pair .r i{display:block;height:10px;border-radius:5px}
 select{font:inherit;background:var(--glass2);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:10px 12px;min-height:46px;width:100%}
+.b-learning_helped{color:var(--pos)}.b-learning_hurt{color:var(--neg)}

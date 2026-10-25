@@ -22,6 +22,7 @@ import { setUsageSink } from "./usage.ts";
 import { pollCommands, overriddenPrice, priceOverrides } from "./commands.ts";
 import { loadConfig, runCycle, updateCycleOutcomes, DEFAULT_CONFIG, type AgentConfig } from "./cycle.ts";
 import { recalibrateSim, loadLatestCalibration } from "./execgap.ts";
+import { runShadowCycle, updateShadowOutcomes } from "./shadow.ts";
 
 const [cmd, arg] = process.argv.slice(2);
 const db = Db.fromEnv();
@@ -164,6 +165,10 @@ if (autonomy) {
     log(`cycle #${r.cycleId.slice(0, 8)}: ${r.newSignals} new signals, ${r.ideas} ideas, ${r.proposed} proposed`);
   });
   every(60_000, "cycle-outcomes", () => updateCycleOutcomes(db));
+  // Live control group: practice-only 'learned' vs 'equal' policies on the same signals. Uses the REAL price
+  // (never the demo override) and never touches the exchange, the agent, or any LLM.
+  every(60_000, "shadow-outcomes", () => updateShadowOutcomes({ pool: db.pool, price: getPrice, log }));
+  every(5 * 60_000, "shadow-cycle", () => runShadowCycle({ pool: db.pool, price: getPrice, log }));
   every(30 * 60_000, "recalibrate", async () => {
     const r = await recalibrateSim(db.pool, sim.config);
     if (r.calibrated) {

@@ -1,6 +1,7 @@
 "use client";
 import Chart from "@/components/Chart";
 import Integrations from "@/components/Integrations";
+import { ShadowCompact } from "@/components/ShadowPanel";
 import Icon from "@/components/Icon";
 import Link from "next/link";
 import { Badge, Card, Count, Empty, Err, Loading, Title, ago, pct, px, usePoll, usd } from "@/components/ui";
@@ -42,6 +43,7 @@ export default function Overview() {
               <div className="levels" style={{ marginTop: 0 }}><span>Compared <b>{ex.summary.n}</b></span><span>Avg slippage gap <b>{ex.summary.avgSlippageBps === null ? "-" : ex.summary.avgSlippageBps.toFixed(1) + " bps"}</b></span><span>Sim PnL <b>{usd(ex.summary.simPnl)}</b></span><span>Real PnL <b>{usd(ex.summary.realPnl)}</b></span></div>
             )}
           </Card>
+          <Card title="Live shadow test: learned vs equal weights" icon="learning" right={<Link className="small" href="/replay">Details</Link>}><ShadowCompact /></Card>
           <Card title="Cumulative PnL (USD)" icon="bars">
             <Chart series={[{ name: "Practice", color: "var(--c1)", pts: d.pnl.synthetic }, { name: "Real", color: "var(--c2)", pts: d.pnl.real }]} />
           </Card>
